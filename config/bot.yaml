@@ -1,0 +1,40 @@
+bot:
+  poll_interval_sec: 60
+  min_profit_usd: 5.0
+  min_trade_vchf: 200.0
+  max_trade_vchf: 2000.0
+  # Deploy sizing: binary search between min/max (see src/scanner/sizing.py)
+  sizing_coarse_step: 100.0
+  max_sizing_quotes: 5
+  probe_sizes: [10, 25, 50, 100]  # used by test/report scripts only
+  slippage_bps: 50
+  quote_freshness_sec: 30
+  peg_min: 0.98
+  peg_max: 1.02
+  vnx_bridge_poll_sec: 30
+  vnx_bridge_timeout_sec: 3600
+  celo_gas_usd_estimate: 0.25
+  solana_fee_usd_estimate: 0.05
+  vnx_bridge_fee_usd: 1.0
+  vnx_platform_fee_usd: 0.5
+  # Wormhole Portal USDT between Celo ↔ Solana (stable rebalance; accounting hub)
+  wormhole_bridge_fee_usd: 0.5
+  # Direct Celo ↔ VNX VCHF bridge (celo_to_vnx / vnx_to_celo)
+  enable_vnx_arb_routes: true
+  # SOL ↔ VNX via CCTP (Sol USDC → ETH USDC → platform)
+  enable_vnx_cctp_routes: true
+  # Prefer direct celo↔sol unless indirect SOL↔platform is ≥ this much better ($)
+  indirect_route_premium_usd: 5.0
+  # API pacing — see src/quotes/api_gate.py and .env.example API_SYNC_* vars
+  quote_concurrency: 1
+  quote_delay_ms: 800
+  api_stagger_ms: 1500
+  eth_gas_usd_estimate: 2.0
+  # Platform-centric treasury (VCHF home on VNX; see src/treasury/)
+  treasury_vchf_home: platform
+  vchf_on_chain_dust: 0.5
+  close_loop_after_cycle: true
+  close_loop_always_return: true
+  close_loop_min_net_usd: 0.0
+  platform_vchf_only: true
+  jit_withdraw: true

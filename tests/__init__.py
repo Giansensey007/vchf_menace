@@ -1,0 +1,1 @@
+"""VCHF Menace tests."""

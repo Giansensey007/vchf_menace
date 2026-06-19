@@ -1,0 +1,10 @@
+services:
+  vchf-menace:
+    build: .
+    env_file: .env
+    environment:
+      DRY_RUN: "true"
+      DB_PATH: /data/bot.db
+    volumes:
+      - ./data:/data
+    restart: unless-stopped

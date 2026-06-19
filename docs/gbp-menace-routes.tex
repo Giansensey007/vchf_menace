@@ -1,0 +1,176 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=18mm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\definecolor{accent}{HTML}{1a365d}
+\definecolor{muted}{HTML}{4a5568}
+\definecolor{okgreen}{HTML}{276749}
+\definecolor{warnred}{HTML}{c53030}
+\hypersetup{colorlinks=true,linkcolor=accent,urlcolor=accent}
+\pagestyle{empty}
+\begin{document}
+\begin{center}
+{\LARGE\bfseries\color{accent} VCHF Menace --- Route Map}\\[6pt]
+{\color{muted}\small Generated 2026-06-18 15:17 UTC · github.com/Giansensey007/gbp\_menace\_-}\\[12pt]
+\end{center}
+\section*{Configuration snapshot}
+\begin{tabular}{@{}ll@{}}
+Treasury VCHF home & platform-only (idle VCHF on VNX) \\
+Closed loop & after every arb (return leg always runs) \\
+Trade size & 200--2000 VCHF \\
+Min profit & \$5.00 round-trip \\
+VNX platform order min & 40 VCHF \\
+VNX deposit min (CELO/SOL VCHF) & 5 VCHF cumulative \\
+VNX deposit min (ETH USDC) & 5 USDC \\
+enable\_vnx\_cctp\_routes & true \\
+enable\_vnx\_arb\_routes & true \\
+\end{tabular}
+\section*{Chain inventory model}
+\begin{itemize}[nosep]
+\item \textbf{Platform (VNX):} all idle VCHF + USDC for \texttt{vnx\_to\_*} buys
+\item \textbf{Celo:} USDT only (no idle VCHF; dust $\leq$ 0.5 VCHF swept to platform)
+\item \textbf{Solana:} USDC only (no idle VCHF)
+\item \textbf{Ethereum:} USDC/USDT hub buffers + gas (no VCHF)
+\end{itemize}
+\section*{Arbitrage routes (6 directed pairs)}
+\subsection*{\textcolor{okgreen}{celo\_to\_solana} (ACTIVE)}
+\begin{tabular}{@{}ll@{}}
+Group & celo\_sol \\
+Buy leg & celo \\
+Sell leg & solana \\
+Ends on & solana USDC \\
+Legacy inverse & solana\_to\_celo \\
+Closed-loop return & solana\_to\_celo \\
+\end{tabular}
+\begin{enumerate}[nosep,leftmargin=*]
+\item Spend Celo USDT $\rightarrow$ buy VCHF (Ubeswap)
+\item Deposit VCHF to VNX (CELO, min 5 VCHF cumulative)
+\item Withdraw VCHF to Solana
+\item Sell VCHF for Sol USDC (Jupiter)
+\item Wormhole USDT rebalance Celo $\leftrightarrow$ Sol (stable leg)
+\end{enumerate}
+\subsection*{\textcolor{okgreen}{solana\_to\_celo} (ACTIVE)}
+\begin{tabular}{@{}ll@{}}
+Group & celo\_sol \\
+Buy leg & solana \\
+Sell leg & celo \\
+Ends on & celo USDT \\
+Legacy inverse & celo\_to\_solana \\
+Closed-loop return & celo\_to\_solana \\
+\end{tabular}
+\begin{enumerate}[nosep,leftmargin=*]
+\item Spend Sol USDC $\rightarrow$ buy VCHF (Jupiter)
+\item Deposit VCHF to VNX (SOL, min 5 VCHF)
+\item Withdraw VCHF to Celo
+\item Sell VCHF for Celo USDT (Ubeswap)
+\item Wormhole USDT rebalance
+\end{enumerate}
+\subsection*{\textcolor{okgreen}{celo\_to\_vnx} (ACTIVE)}
+\begin{tabular}{@{}ll@{}}
+Group & celo\_vnx \\
+Buy leg & celo \\
+Sell leg & vnx \\
+Ends on & vnx USDC \\
+Legacy inverse & vnx\_to\_celo \\
+Closed-loop return & vnx\_to\_celo \\
+\end{tabular}
+\begin{enumerate}[nosep,leftmargin=*]
+\item Spend Celo USDT $\rightarrow$ buy VCHF on Celo
+\item Deposit VCHF to VNX platform (CELO)
+\item Platform sell VCHF for USDC
+\item Platform sell VCHF for USDC
+\end{enumerate}
+\subsection*{\textcolor{okgreen}{vnx\_to\_celo} (ACTIVE)}
+\begin{tabular}{@{}ll@{}}
+Group & celo\_vnx \\
+Buy leg & vnx \\
+Sell leg & celo \\
+Ends on & celo USDT \\
+Legacy inverse & celo\_to\_vnx \\
+Closed-loop return & celo\_to\_vnx \\
+\end{tabular}
+\begin{enumerate}[nosep,leftmargin=*]
+\item Platform buy VCHF (min 40 VCHF order)
+\item Withdraw VCHF to Celo
+\item Sell VCHF for Celo USDT
+\end{enumerate}
+\subsection*{\textcolor{okgreen}{solana\_to\_vnx} (ACTIVE)}
+\begin{tabular}{@{}ll@{}}
+Group & vnx\_sol \\
+Buy leg & solana \\
+Sell leg & vnx \\
+Ends on & vnx USDC \\
+Legacy inverse & vnx\_to\_solana \\
+Closed-loop return & vnx\_to\_solana \\
+\end{tabular}
+\begin{enumerate}[nosep,leftmargin=*]
+\item Spend Sol USDC $\rightarrow$ buy VCHF (Jupiter)
+\item Deposit VCHF to VNX (SOL, min 5 VCHF)
+\item Platform sell VCHF for USDC
+\end{enumerate}
+\subsection*{\textcolor{okgreen}{vnx\_to\_solana} (ACTIVE)}
+\begin{tabular}{@{}ll@{}}
+Group & vnx\_sol \\
+Buy leg & vnx \\
+Sell leg & solana \\
+Ends on & solana USDC \\
+Legacy inverse & solana\_to\_vnx \\
+Closed-loop return & \textbf{cctp\_sol\_usdc\_to\_vnx} (CCTP USDC path) \\
+\end{tabular}
+\begin{enumerate}[nosep,leftmargin=*]
+\item Platform buy VCHF (min 40 VCHF order)
+\item Withdraw VCHF to Solana
+\item Sell VCHF for Sol USDC (Jupiter)
+\end{enumerate}
+\section*{Synthetic return route}
+\subsection*{cctp\_sol\_usdc\_to\_vnx}
+\begin{enumerate}[nosep,leftmargin=*]
+\item Burn Sol USDC via Circle CCTP $\rightarrow$ Ethereum
+\item Claim USDC on ETH hot wallet
+\item Deposit USDC to VNX platform (ETH, min 5 USDC)
+\item Platform buy VCHF with credited USDC
+\item \textit{Return leg after vnx\_to\_solana when origin = platform}
+\end{enumerate}
+\section*{Closed-loop matrix}
+\small
+\begin{longtable}{@{}llll@{}}
+\toprule
+Origin & Primary & Return leg & Ends on \\
+\midrule
+\endhead
+Celo USDT & celo\_to\_solana & solana\_to\_celo & Celo USDT \\
+Celo USDT & celo\_to\_vnx & vnx\_to\_celo & Celo USDT \\
+Sol USDC & solana\_to\_vnx & vnx\_to\_solana & Sol USDC \\
+Sol USDC & solana\_to\_celo & celo\_to\_solana & Sol USDC \\
+Platform & vnx\_to\_celo & celo\_to\_vnx & Platform USDC \\
+Platform & vnx\_to\_solana & \textbf{cctp\_sol\_usdc\_to\_vnx} & Platform VCHF \\
+\bottomrule
+\end{longtable}
+\normalsize
+\section*{Hub \& rebalance routes (matrix test steps, not scanner arb)}
+\begin{tabular}{@{}ll@{}}
+\toprule
+Step ID & Flow \\
+\midrule
+eth\_to\_vnx & ETH USDC $\rightarrow$ VNX platform USDC deposit \\
+vnx\_to\_eth & VNX platform USDC $\rightarrow$ ETH hot wallet withdraw \\
+cctp\_sol\_to\_eth & Sol USDC $\rightarrow$ ETH USDC (Circle CCTP) \\
+cctp\_eth\_to\_sol & ETH USDC $\rightarrow$ Sol USDC (Circle CCTP) \\
+wormhole\_celo\_to\_eth & Celo USDT $\rightarrow$ ETH USDT (Wormhole) + USDT$\rightarrow$USDC swap \\
+wormhole\_eth\_to\_celo & ETH USDT $\rightarrow$ Celo USDT (Wormhole) \\
+celo\_usdt\_to\_vnx\_usdc & Celo USDT $\rightarrow$ Wormhole $\rightarrow$ ETH USDC $\rightarrow$ VNX USDC \\
+\bottomrule
+\end{tabular}
+\section*{Live PnL}
+\textit{Run \texttt{python scripts/generate\_routes\_pdf.py --live} to embed current quotes.}
+\vfill
+\begin{center}
+\color{muted}\small Scanner uses fixed-size VNX economics + CCTP return for platform closed loops.
+\end{center}
+\end{document}

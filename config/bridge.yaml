@@ -1,0 +1,45 @@
+# Cross-chain stable bridge: Wormhole Portal (Guardian-attested, used by Celo docs)
+# https://wormhole.com/docs/products/reference/contract-addresses/
+wormhole:
+  name: Wormhole Portal
+  url: https://portalbridge.com
+  celo_chain_id: 14
+  solana_chain_id: 1
+  ethereum_chain_id: 2
+  celo_token_bridge: "0x796Dff6D74F3E27060B71255Fe517BFb23C93eed"
+  ethereum_token_bridge: "0x3ee18B2214AFF97000D974cf647E7C347E8fa585"
+  solana_token_bridge: "wormDTUJ6AWPNvk59vGQbDvGJmqbDTdgWgAqcLBCgUb"
+  # Canonical Celo USDT — DEX, Wormhole Celo→ETH/Sol outbound, accounting hub
+  celo_usdt: "0x48065fbbe25f71c9282ddf5e1cd6d6a887483d5e"
+  # Wormhole-wrapped ETH-origin USDT — only from ETH→Celo redeem; swap to canonical (Uniswap fee 100)
+  celo_usdt_wormhole_from_eth: "0x617f3112bf5397D0467D315cC709EF968D9ba546"
+  ethereum_usdt: "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+  solana_usdt: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"
+  solana_usdc: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+  # Conservative fee estimates (USD) when live quote unavailable
+  fee_usd_estimate: 0.50
+  attestation_poll_sec: 15
+  attestation_timeout_sec: 900
+  claim_interval_sec: 30
+
+hub:
+  # Celo routes use USDT; Solana DEX uses USDC — normalize everything to USDT for PnL
+  accounting_stable: USDT
+  sol_usdc_to_usdt_via: jupiter
+
+# Circle CCTP v2 — USDC Solana ↔ Ethereum (VNX platform settlement on ETH)
+# https://developers.circle.com/cctp
+cctp:
+  name: Circle CCTP
+  iris_api: https://iris-api.circle.com
+  solana_domain: 5
+  ethereum_domain: 0
+  solana_usdc: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+  ethereum_usdc: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+  ethereum_token_messenger: "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d"
+  ethereum_message_transmitter: "0x81D40F21F12A8F0E3252Bccb954D722d4c464B64"
+  solana_token_messenger_minter: "CCTPV2vPZJS2u2BBsUoscuikbYjnpFmbFsvVuJdgUMQe"
+  solana_message_transmitter: "CCTPV2Sm4AdWt5296sk4P66VBZ7bEhcARwFaaS9YPbeC"
+  fast_finality_threshold: 1000
+  fee_usd_estimate: 1.50
+  attestation_timeout_sec: 1800

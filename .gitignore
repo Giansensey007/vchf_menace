@@ -1,0 +1,13 @@
+.env
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+data/
+validation/
+scripts/cctp/node_modules/
+scripts/cctp/target/
+docs/*.aux
+docs/*.log
+docs/*.out
