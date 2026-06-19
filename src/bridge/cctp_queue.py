@@ -237,6 +237,16 @@ class CctpClaimQueue:
         self._store.items.append(item)
         self.save()
         logger.info("CCTP queued %s → domain %s (%s)", source_tx, dest_domain, intent)
+        try:
+            from src.treasury.in_flight import InFlightLedger
+
+            InFlightLedger(os.getenv("TOKEN_ASSET", "VCHF")).log_cctp_burn(
+                source_tx,
+                item.dest_chain,
+                intent=intent,
+            )
+        except Exception as exc:
+            logger.debug("CCTP in-flight log skip: %s", exc)
         return item, True
 
     async def discover(self, client: httpx.AsyncClient) -> int:

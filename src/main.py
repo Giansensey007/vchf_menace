@@ -28,12 +28,14 @@ logger = logging.getLogger("vchf_menace")
 
 async def run_once() -> None:
     bot_cfg = load_bot_config()
-    scanner = ArbScanner(bot_cfg)
-    opp = await scanner.best_opportunity()
-
     chains = load_chains()
     token = load_tokens()["VCHF"]
     treasury = TreasuryManager(chains, token, bot_cfg)
+    snap = await treasury.snapshot()
+    logger.info(treasury.balance_line(snap))
+
+    scanner = ArbScanner(bot_cfg)
+    opp = await scanner.best_opportunity()
 
     if not opp:
         logger.info("No profitable opportunity (min $%.2f)", bot_cfg.min_profit_usd)

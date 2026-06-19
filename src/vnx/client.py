@@ -142,6 +142,32 @@ class VnxClient:
     async def query_orders(self, **filters: Any) -> dict[str, Any]:
         return await self._private_post("queryOrders", filters)
 
+    async def _private_post_optional(self, endpoint: str, payload: dict[str, Any]) -> dict[str, Any] | None:
+        """Private POST that returns None on 403/404 (endpoint not enabled for this API key)."""
+        path = f"/api/v1/private/{endpoint}"
+        url = f"{VNX_API_BASE}/private/{endpoint}"
+        sorted_payload = sort_object_deep(payload)
+        body = canonical_vnx_body(payload)
+        nonce = self._next_nonce()
+        headers = auth_headers(path, sorted_payload, nonce=nonce)
+        resp = await post_with_retry(self.client, url, content=body.encode("utf-8"), headers=headers)
+        if resp.status_code in (403, 404):
+            logger.warning("VNX %s not available (HTTP %s)", endpoint, resp.status_code)
+            return None
+        if resp.status_code >= 400:
+            logger.error("VNX %s HTTP %s: %s", endpoint, resp.status_code, resp.text[:200])
+            resp.raise_for_status()
+        return resp.json()
+
+    async def query_withdrawals(self, **filters: Any) -> dict[str, Any] | None:
+        return await self._private_post_optional("queryWithdrawals", filters)
+
+    async def query_transfers(self, **filters: Any) -> dict[str, Any] | None:
+        resp = await self._private_post_optional("queryTransfers", filters)
+        if resp is not None:
+            return resp
+        return await self._private_post_optional("transfers", filters)
+
     def _asset_balance(self, balance_resp: dict[str, Any], asset: str) -> float:
         for row in balance_resp.get("balances") or []:
             if row.get("asset") == asset:
@@ -153,3 +179,6 @@ class VnxClient:
 
     def usdc_balance(self, balance_resp: dict[str, Any]) -> float:
         return self._asset_balance(balance_resp, "USDC")
+
+    def chf_balance(self, balance_resp: dict[str, Any]) -> float:
+        return self._asset_balance(balance_resp, "CHF")

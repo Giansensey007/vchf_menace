@@ -83,14 +83,16 @@ def _log(msg: str) -> None:
 
 
 async def audit() -> None:
+    from src.treasury.in_flight import InFlightLedger
+    from src.treasury.manager import TreasuryManager
+
     chains = load_chains()
     token = load_tokens()["VCHF"]
-    async with VnxClient() as vnx:
-        bal = await vnx.account_balance()
-        _log(
-            f"Platform: USDC={vnx.usdc_balance(bal):.2f} VCHF={vnx.vchf_balance(bal):.2f} "
-            f"CHF={vnx._asset_balance(bal, 'CHF'):.2f}"
-        )
+    bot_cfg = load_bot_config()
+    treasury = TreasuryManager(chains, token, bot_cfg)
+    snap = await treasury.snapshot()
+    _log(treasury.balance_line(snap))
+    _log(InFlightLedger("VCHF").format_audit_block())
     celo = CeloExecutor(chains["celo"])
     dec = token_decimals(token, "celo")
     from src.bridge.celo_usdt import celo_usdt_balances

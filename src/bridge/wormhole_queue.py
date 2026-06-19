@@ -124,6 +124,17 @@ class WormholeClaimQueue:
         self._store.items.append(item)
         self.save()
         logger.info("Wormhole queued %s→%s tx=%s", source_chain, dest_chain, tx[:18])
+        try:
+            from src.treasury.in_flight import InFlightLedger
+
+            InFlightLedger(os.getenv("TOKEN_ASSET", "VCHF")).log_wormhole_burn(
+                tx,
+                source_chain,
+                dest_chain,
+                intent=intent,
+            )
+        except Exception as exc:
+            logger.debug("Wormhole in-flight log skip: %s", exc)
         return item
 
     async def run_until_empty(

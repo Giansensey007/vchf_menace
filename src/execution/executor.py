@@ -353,8 +353,13 @@ class ArbExecutor:
                 pass
             await asyncio.sleep(self.bot_cfg.vnx_bridge_poll_sec)
         else:
+            from src.treasury.in_flight import InFlightLedger
+
             record.state = CycleState.FAILED
-            record.error = "timeout waiting for VCHF on Sol after VNX withdraw"
+            record.error = (
+                f"timeout waiting for VCHF on Sol after VNX withdraw — "
+                f"funds may be pending at VNX ({InFlightLedger('VCHF').format_summary()})"
+            )
             return
 
         vchf_in = from_human(vchf_amt, sol_dec)
@@ -495,8 +500,13 @@ class ArbExecutor:
                 break
             await asyncio.sleep(self.bot_cfg.vnx_bridge_poll_sec)
         else:
+            from src.treasury.in_flight import InFlightLedger
+
             record.state = CycleState.FAILED
-            record.error = "timeout waiting for VCHF on Celo after VNX withdraw"
+            record.error = (
+                f"timeout waiting for VCHF on Celo after VNX withdraw — "
+                f"funds may be pending at VNX ({InFlightLedger('VCHF').format_summary()})"
+            )
             return
 
         min_usdt = int(sim.stable_out_usd * 0.995 * 10**self.celo.hub_decimals)
@@ -723,8 +733,13 @@ class ArbExecutor:
                     break
                 await asyncio.sleep(self.bot_cfg.vnx_bridge_poll_sec)
             if not arrived:
+                from src.treasury.in_flight import InFlightLedger
+
                 record.state = CycleState.FAILED
-                record.error = "timeout waiting for VCHF on Celo after VNX withdraw"
+                record.error = (
+                    f"timeout waiting for VCHF on Celo after VNX withdraw — "
+                    f"funds may be pending at VNX ({InFlightLedger('VCHF').format_summary()})"
+                )
                 return
             min_usdt = int(sim.stable_out_usd * 0.995 * 10**self.celo.hub_decimals)
             tx = celo_exec.swap_exact_input(
@@ -755,7 +770,12 @@ class ArbExecutor:
                 await asyncio.sleep(self.bot_cfg.vnx_bridge_poll_sec)
             if not arrived:
                 record.state = CycleState.FAILED
-                record.error = "timeout waiting for VCHF on Sol after VNX withdraw"
+                from src.treasury.in_flight import InFlightLedger
+
+                record.error = (
+                    f"timeout waiting for VCHF on Sol after VNX withdraw — "
+                    f"funds may be pending at VNX ({InFlightLedger('VCHF').format_summary()})"
+                )
                 return
             tx = await sol_exec.swap(
                 client,

@@ -6,7 +6,8 @@ import os
 import time
 from dataclasses import dataclass
 
-from src.config_loader import BotConfig, is_dry_run
+from src.config_loader import BotConfig, is_dry_run, load_chains, load_tokens
+from src.treasury.in_flight import InFlightLedger, read_on_chain_token_balances
 from src.vnx.client import VnxClient
 from src.vnx.collision import collision_backoff_sec, collision_retry_max, is_vnx_collision_error
 from src.vnx.trading import _round_down, VCHF_USDC_QTY_DECIMALS
@@ -82,6 +83,7 @@ class VnxBridge:
 
     def __init__(self, bot_cfg: BotConfig) -> None:
         self.cfg = bot_cfg
+        self._ledger = InFlightLedger("VCHF")
 
     async def bridge_vchf(
         self,
@@ -155,6 +157,25 @@ class VnxBridge:
                         direction, quantity, "", dest_label, None, None, False, False, "zero withdraw qty"
                     )
 
+                pending = self._ledger.pending_for_blockchain(dest_blockchain)
+                if pending:
+                    logger.info(
+                        "Bridge %s: skip duplicate withdraw — %.2f VCHF already pending to %s",
+                        direction,
+                        sum(p.quantity for p in pending),
+                        dest_blockchain,
+                    )
+                    return BridgeResult(
+                        direction,
+                        sum(p.quantity for p in pending),
+                        "",
+                        dest_label,
+                        None,
+                        [t for p in pending for t in p.txids],
+                        False,
+                        True,
+                    )
+
                 wd, wd_err = await _withdraw_with_collision_retry(
                     vnx, "VCHF", withdraw_qty, dest_label
                 )
@@ -171,6 +192,19 @@ class VnxBridge:
                         wd_err,
                     )
                 txids = (wd or {}).get("txids")
+                chains = load_chains()
+                token = load_tokens()["VCHF"]
+                celo_base, sol_base = read_on_chain_token_balances(chains, token)
+                self._ledger.log_vnx_withdraw(
+                    withdraw_qty,
+                    dest_blockchain,
+                    dest_label,
+                    direction,
+                    txids,
+                    baseline_celo_token=celo_base,
+                    baseline_sol_token=sol_base,
+                    baseline_platform_token=balance,
+                )
                 return BridgeResult(
                     direction, withdraw_qty, "", dest_label, None, txids, False, True
                 )
@@ -210,6 +244,14 @@ class VnxBridge:
                     False,
                     "deposit tx failed",
                 )
+
+            self._ledger.log_vnx_deposit(
+                quantity,
+                source_blockchain,
+                direction,
+                deposit_tx,
+                baseline_platform_token=balance_before,
+            )
 
             deadline = time.time() + self.cfg.vnx_bridge_timeout_sec
             credited = balance_before
@@ -274,22 +316,44 @@ class VnxBridge:
                     direction, quantity, deposit_address, dest_label, deposit_tx, None, False, False, "zero withdraw qty"
                 )
 
-            wd, wd_err = await _withdraw_with_collision_retry(
-                vnx, "VCHF", withdraw_qty, dest_label
-            )
-            if wd_err:
-                return BridgeResult(
+            pending = self._ledger.pending_for_blockchain(dest_blockchain)
+            if pending:
+                logger.info(
+                    "Bridge %s: skip duplicate withdraw after deposit — pending to %s",
                     direction,
-                    quantity,
-                    deposit_address,
-                    dest_label,
-                    deposit_tx,
-                    None,
-                    False,
-                    False,
-                    wd_err,
+                    dest_blockchain,
                 )
-            txids = (wd or {}).get("txids")
+                txids = [t for p in pending for t in p.txids]
+            else:
+                wd, wd_err = await _withdraw_with_collision_retry(
+                    vnx, "VCHF", withdraw_qty, dest_label
+                )
+                if wd_err:
+                    return BridgeResult(
+                        direction,
+                        quantity,
+                        deposit_address,
+                        dest_label,
+                        deposit_tx,
+                        None,
+                        False,
+                        False,
+                        wd_err,
+                    )
+                txids = (wd or {}).get("txids")
+                chains = load_chains()
+                token = load_tokens()["VCHF"]
+                celo_base, sol_base = read_on_chain_token_balances(chains, token)
+                self._ledger.log_vnx_withdraw(
+                    withdraw_qty,
+                    dest_blockchain,
+                    dest_label,
+                    direction,
+                    txids,
+                    baseline_celo_token=celo_base,
+                    baseline_sol_token=sol_base,
+                    baseline_platform_token=balance,
+                )
             return BridgeResult(
                 direction,
                 withdraw_qty,
