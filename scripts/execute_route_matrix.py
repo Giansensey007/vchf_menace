@@ -59,6 +59,7 @@ logger = logging.getLogger("route_matrix")
 import os
 
 TEST_VCHF = 31.0
+_ROUTE_SIZE = TEST_VCHF  # overridden by --size CLI flag
 PROBE_VCHF = 5.0  # matches VNX_MIN_DEPOSIT_VCHF_CELO for Celo deposit routes
 PROBE_USDC = 0.4  # minimum Sol USDC for DEX probe when balance < 5
 CELO_MIN_VCHF = 5.0  # VNX platform min cumulative deposit on CELO
@@ -1103,12 +1104,12 @@ STEPS = {
     "celo-swaps": step_celo_swaps,
     "sol-swaps": step_sol_swaps,
     "wormhole-usdt": step_wormhole_usdt_check,
-    "vnx-to-sol": lambda: _force_exec("vnx_to_solana"),
-    "sol-to-vnx": lambda: _force_exec("solana_to_vnx"),
-    "sol-to-celo": lambda: _force_exec("solana_to_celo"),
-    "celo-to-sol": lambda: _force_exec("celo_to_solana"),
-    "celo-to-vnx": lambda: _force_exec("celo_to_vnx"),
-    "vnx-to-celo": lambda: _force_exec("vnx_to_celo"),
+    "vnx-to-sol": lambda: _force_exec("vnx_to_solana", _ROUTE_SIZE),
+    "sol-to-vnx": lambda: _force_exec("solana_to_vnx", _ROUTE_SIZE),
+    "sol-to-celo": lambda: _force_exec("solana_to_celo", _ROUTE_SIZE),
+    "celo-to-sol": lambda: _force_exec("celo_to_solana", _ROUTE_SIZE),
+    "celo-to-vnx": lambda: _force_exec("celo_to_vnx", _ROUTE_SIZE),
+    "vnx-to-celo": lambda: _force_exec("vnx_to_celo", _ROUTE_SIZE),
     "cctp-sol-eth": step_cctp_sol_to_eth,
     "cctp-eth-sol": step_cctp_eth_to_sol,
     "wormhole-claim": step_wormhole_claim,
@@ -1137,9 +1138,17 @@ async def run_all() -> int:
 
 
 async def main() -> None:
+    global _ROUTE_SIZE
     p = argparse.ArgumentParser()
     p.add_argument("--step", default="production", choices=["all", *STEPS.keys()])
+    p.add_argument(
+        "--size",
+        type=float,
+        default=TEST_VCHF,
+        help=f"VCHF size for route force-exec steps (default {TEST_VCHF})",
+    )
     args = p.parse_args()
+    _ROUTE_SIZE = args.size
     if args.step == "all":
         rc = await run_full_matrix()
         sys.exit(0 if rc == 0 else 1)
