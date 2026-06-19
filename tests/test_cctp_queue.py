@@ -6,6 +6,13 @@ import pytest
 from src.bridge.cctp_queue import CctpClaimQueue, CctpQueueStatus
 
 
+@pytest.fixture(autouse=True)
+def _no_in_flight_side_effects():
+    """CCTP enqueue logs to InFlightLedger — keep unit tests off data/in_flight.jsonl."""
+    with patch("src.treasury.in_flight.InFlightLedger.log_cctp_burn"):
+        yield
+
+
 @pytest.fixture
 def queue_path(tmp_path):
     return tmp_path / "cctp_queue.json"

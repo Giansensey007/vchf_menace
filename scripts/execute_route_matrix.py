@@ -930,7 +930,7 @@ async def step_production_readiness() -> bool:
 
 
 async def step_platform_probe() -> bool:
-    """Platform buy/sell round-trip at VNX minimum (40 VCHF)."""
+    """Platform buy/sell round-trip at VNX minimum (30 VCHF order; probe uses TEST_VCHF)."""
     cfg = load_bot_config()
     size = TEST_VCHF
     _log(f"\n=== Platform probe buy/sell @ {size} VCHF ===")

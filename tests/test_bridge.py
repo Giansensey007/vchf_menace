@@ -84,18 +84,23 @@ async def test_bridge_withdraw_only_dry_run(bot_cfg):
 
 
 @pytest.mark.asyncio
-async def test_bridge_deposit_only_skips_withdraw(bot_cfg):
+async def test_bridge_deposit_only_skips_withdraw(bot_cfg, tmp_path):
     os.environ["DRY_RUN"] = "false"
 
     async def fake_deposit(addr):
         return "0xdep"
+
+    bridge = VnxBridge(bot_cfg)
+    from src.treasury.in_flight import InFlightLedger
+
+    bridge._ledger = InFlightLedger("VCHF", tmp_path / "in_flight.jsonl")
 
     with patch("src.vnx.bridge.VnxClient") as mock_cls:
         inst = AsyncMock()
         mock_cls.return_value.__aenter__.return_value = inst
         inst.deposit_address.return_value = {"address": "0xdep123"}
         inst.vchf_balance = MagicMock(side_effect=[0.0, 50.0])
-        result = await VnxBridge(bot_cfg).bridge_vchf(
+        result = await bridge.bridge_vchf(
             direction="solana_to_vnx",
             quantity=50.0,
             source_blockchain="SOL",

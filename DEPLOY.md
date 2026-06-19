@@ -23,8 +23,8 @@
 |-------|---------|-------|
 | `python -m src.main` | **Deploy** — poll, dynamic sizing, min profit | 200–2000 VCHF |
 | `python scripts/test_probe_trades.py` | **Test** — tiny swaps, loss OK | 5 VCHF / ~$5 USDC |
-| `python scripts/execute_route_matrix.py --step verify-all` | **Preflight** — claims, sims, funding audit | 40 VCHF quotes |
-| `python scripts/rebalance_for_test.py` | **Fund** — move stables for 40 VCHF matrix | per `route_test` in production.yaml |
+| `python scripts/execute_route_matrix.py --step verify-all` | **Preflight** — claims, sims, funding audit | 31 VCHF quotes |
+| `python scripts/rebalance_for_test.py` | **Fund** — move stables for 31 VCHF matrix | per `route_test` in production.yaml |
 | `python scripts/convert_platform_chf.py` | **Fund** — CHF→USDC on VNX (min 30 USDC order) | optional |
 
 ## Required env vars
@@ -53,7 +53,7 @@
 |-------|-------|-------|
 | CELO/SOL VCHF deposit credit | 5 VCHF cumulative | `VNX_MIN_DEPOSIT_VCHF_*` |
 | ETH USDC deposit credit | 20 USDC cumulative | `VNX_MIN_DEPOSIT_USDC_ETH` |
-| Platform buy/sell order | 40 VCHF | `src/vnx/trading.py` |
+| Platform buy/sell order | 30 VCHF | `src/vnx/trading.py` |
 
 ## VNX API keys
 
