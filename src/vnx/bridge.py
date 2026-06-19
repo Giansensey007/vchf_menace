@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 from src.config_loader import BotConfig, is_dry_run
 from src.vnx.client import VnxClient
+from src.vnx.collision import collision_backoff_sec, collision_retry_max, is_vnx_collision_error
 from src.vnx.trading import _round_down, VCHF_USDC_QTY_DECIMALS
 from src.vnx.deposits import check_deposit_amount
 
@@ -15,6 +16,52 @@ logger = logging.getLogger(__name__)
 
 # VCHF network fee buffer for platform withdraw (qty + fee must be <= balance)
 VCHF_WITHDRAW_FEE_BUFFER = 1.35
+
+
+async def _withdraw_with_collision_retry(
+    vnx: VnxClient,
+    asset: str,
+    quantity: float,
+    dest_label: str,
+    *,
+    blockchain: str | None = None,
+) -> tuple[dict | None, str | None]:
+    """Withdraw with backoff on shared-account contention; never raises."""
+    last_err: str | None = None
+    for attempt in range(collision_retry_max()):
+        try:
+            if blockchain:
+                wd = await vnx.withdraw(asset, quantity, dest_label, blockchain=blockchain)
+            else:
+                wd = await vnx.withdraw(asset, quantity, dest_label)
+            if wd.get("result") == "error":
+                err = wd.get("error") or {}
+                last_err = str(err.get("message") or err.get("code") or "withdraw failed")
+                if is_vnx_collision_error(last_err) and attempt + 1 < collision_retry_max():
+                    logger.warning(
+                        "VNX withdraw contention (attempt %s/%s): %s",
+                        attempt + 1,
+                        collision_retry_max(),
+                        last_err,
+                    )
+                    await asyncio.sleep(collision_backoff_sec(attempt))
+                    continue
+                return None, last_err
+            return wd, None
+        except Exception as exc:
+            last_err = str(exc)[:300]
+            if is_vnx_collision_error(last_err) and attempt + 1 < collision_retry_max():
+                logger.warning(
+                    "VNX withdraw contention (attempt %s/%s): %s",
+                    attempt + 1,
+                    collision_retry_max(),
+                    last_err,
+                )
+                await asyncio.sleep(collision_backoff_sec(attempt))
+                continue
+            logger.warning("VNX withdraw failed: %s", last_err)
+            return None, last_err
+    return None, last_err or "withdraw failed after retries"
 
 
 @dataclass
@@ -108,8 +155,22 @@ class VnxBridge:
                         direction, quantity, "", dest_label, None, None, False, False, "zero withdraw qty"
                     )
 
-                wd = await vnx.withdraw("VCHF", withdraw_qty, dest_label)
-                txids = wd.get("txids")
+                wd, wd_err = await _withdraw_with_collision_retry(
+                    vnx, "VCHF", withdraw_qty, dest_label
+                )
+                if wd_err:
+                    return BridgeResult(
+                        direction,
+                        quantity,
+                        "",
+                        dest_label,
+                        None,
+                        None,
+                        False,
+                        False,
+                        wd_err,
+                    )
+                txids = (wd or {}).get("txids")
                 return BridgeResult(
                     direction, withdraw_qty, "", dest_label, None, txids, False, True
                 )
@@ -213,8 +274,22 @@ class VnxBridge:
                     direction, quantity, deposit_address, dest_label, deposit_tx, None, False, False, "zero withdraw qty"
                 )
 
-            wd = await vnx.withdraw("VCHF", withdraw_qty, dest_label)
-            txids = wd.get("txids")
+            wd, wd_err = await _withdraw_with_collision_retry(
+                vnx, "VCHF", withdraw_qty, dest_label
+            )
+            if wd_err:
+                return BridgeResult(
+                    direction,
+                    quantity,
+                    deposit_address,
+                    dest_label,
+                    deposit_tx,
+                    None,
+                    False,
+                    False,
+                    wd_err,
+                )
+            txids = (wd or {}).get("txids")
             return BridgeResult(
                 direction,
                 withdraw_qty,

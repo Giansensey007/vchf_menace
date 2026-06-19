@@ -11,6 +11,7 @@ import httpx
 
 from src.quotes.rate_limit import get_with_retry, post_with_retry
 from src.vnx.auth import auth_headers, canonical_vnx_body, ensure_public_key_env, sort_object_deep
+from src.vnx.collision import is_vnx_collision_error
 
 logger = logging.getLogger(__name__)
 
@@ -87,9 +88,35 @@ class VnxClient:
         headers = auth_headers(path, sorted_payload, nonce=nonce)
         resp = await post_with_retry(self.client, url, content=body.encode("utf-8"), headers=headers)
         if resp.status_code >= 400:
+            body_text = resp.text[:500]
+            if is_vnx_collision_error(body_text):
+                logger.warning(
+                    "VNX %s contention HTTP %s: %s",
+                    endpoint,
+                    resp.status_code,
+                    body_text[:200],
+                )
+                try:
+                    data = resp.json()
+                except Exception:
+                    data = {}
+                err = data.get("error") or {}
+                return {
+                    "result": "error",
+                    "error": {
+                        "code": err.get("code") or f"http_{resp.status_code}",
+                        "message": err.get("message") or body_text[:300],
+                    },
+                }
             logger.error("VNX %s HTTP %s: %s", endpoint, resp.status_code, resp.text[:200])
             resp.raise_for_status()
-        return resp.json()
+        data = resp.json()
+        if data.get("result") == "error":
+            err = data.get("error") or {}
+            msg = str(err.get("message") or err.get("code") or "")
+            if is_vnx_collision_error(msg):
+                logger.warning("VNX %s contention: %s", endpoint, msg[:200])
+        return data
 
     async def account_balance(self) -> dict[str, Any]:
         return await self._private_post("accountBalance", {})

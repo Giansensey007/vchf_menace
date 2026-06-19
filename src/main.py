@@ -16,6 +16,7 @@ from src.scanner.arb import ArbScanner
 from src.treasury.manager import TreasuryManager
 from src.treasury.loops import origin_for_direction
 from src.vnx.auth import ensure_public_key_env
+from src.vnx.collision import is_vnx_collision_error
 
 logging.basicConfig(
     level=logging.INFO,
@@ -83,6 +84,11 @@ async def run_once() -> None:
                 result.reason,
                 f"{result.round_trip_profit_usd:.2f}" if result.round_trip_profit_usd is not None else "n/a",
             )
+            if not result.closed and is_vnx_collision_error(result.reason):
+                logger.warning(
+                    "Closed loop skipped due to VNX platform contention (GBP bot may be active): %s",
+                    result.reason,
+                )
             if result.primary:
                 logger.info(
                     "Primary %s state=%s txs=%s",
@@ -105,6 +111,11 @@ async def run_once() -> None:
             return
         record = await executor.run_cycle(client, opp.direction, opp.size_vchf)
         await treasury.consolidate_vchf_to_platform()
+        if record.error and is_vnx_collision_error(record.error):
+            logger.warning(
+                "Cycle skipped due to VNX platform contention (GBP bot may be active): %s",
+                record.error,
+            )
         logger.info("Cycle %s state=%s txs=%s error=%s", record.id, record.state, record.tx_hashes, record.error)
 
 
@@ -133,8 +144,14 @@ async def main_loop() -> None:
     while True:
         try:
             await run_once()
-        except Exception:
-            logger.exception("Scan cycle error")
+        except Exception as exc:
+            if is_vnx_collision_error(str(exc)):
+                logger.warning(
+                    "Scan cycle skipped — VNX platform contention (GBP bot may be active): %s",
+                    exc,
+                )
+            else:
+                logger.exception("Scan cycle error")
         await asyncio.sleep(bot_cfg.poll_interval_sec)
 
 

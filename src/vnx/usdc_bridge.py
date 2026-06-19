@@ -10,6 +10,7 @@ import httpx
 
 from src.config_loader import BotConfig, is_dry_run
 from src.vnx.client import VnxClient
+from src.vnx.collision import collision_backoff_sec, collision_retry_max, is_vnx_collision_error
 from src.vnx.deposits import check_usdc_deposit_amount
 
 logger = logging.getLogger(__name__)
@@ -164,15 +165,45 @@ class VnxUsdcBridge:
                     direction, withdraw_qty, "", label, None, ["dry-run-usdc-withdraw"], True, True
                 )
 
-            try:
-                wd = await vnx.withdraw(
-                    "USDC", withdraw_qty, label, blockchain=self.eth_blockchain
-                )
-            except httpx.HTTPStatusError as exc:
-                body = exc.response.text[:300] if exc.response else str(exc)
-                logger.warning("VNX USDC withdraw failed: %s", body)
-                return UsdcBridgeResult(
-                    direction, withdraw_qty, "", label, None, None, False, False, body
-                )
-            txids = wd.get("txids") or []
-            return UsdcBridgeResult(direction, withdraw_qty, "", label, None, txids, False, True)
+            last_err: str | None = None
+            for attempt in range(collision_retry_max()):
+                try:
+                    wd = await vnx.withdraw(
+                        "USDC", withdraw_qty, label, blockchain=self.eth_blockchain
+                    )
+                    if wd.get("result") == "error":
+                        err = wd.get("error") or {}
+                        last_err = str(err.get("message") or err.get("code") or "withdraw failed")
+                        if is_vnx_collision_error(last_err) and attempt + 1 < collision_retry_max():
+                            logger.warning(
+                                "VNX USDC withdraw contention (attempt %s/%s): %s",
+                                attempt + 1,
+                                collision_retry_max(),
+                                last_err,
+                            )
+                            await asyncio.sleep(collision_backoff_sec(attempt))
+                            continue
+                        return UsdcBridgeResult(
+                            direction, withdraw_qty, "", label, None, None, False, False, last_err
+                        )
+                    txids = wd.get("txids") or []
+                    return UsdcBridgeResult(direction, withdraw_qty, "", label, None, txids, False, True)
+                except httpx.HTTPStatusError as exc:
+                    body = exc.response.text[:300] if exc.response else str(exc)
+                    last_err = body
+                    if is_vnx_collision_error(body) and attempt + 1 < collision_retry_max():
+                        logger.warning(
+                            "VNX USDC withdraw contention (attempt %s/%s): %s",
+                            attempt + 1,
+                            collision_retry_max(),
+                            body[:200],
+                        )
+                        await asyncio.sleep(collision_backoff_sec(attempt))
+                        continue
+                    logger.warning("VNX USDC withdraw failed: %s", body)
+                    return UsdcBridgeResult(
+                        direction, withdraw_qty, "", label, None, None, False, False, body
+                    )
+            return UsdcBridgeResult(
+                direction, withdraw_qty, "", label, None, None, False, False, last_err or "withdraw failed"
+            )

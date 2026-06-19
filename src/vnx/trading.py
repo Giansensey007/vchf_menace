@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 from src.config_loader import BotConfig, is_dry_run
 from src.vnx.client import VnxClient
+from src.vnx.collision import collision_backoff_sec, collision_retry_max, is_vnx_collision_error
 
 logger = logging.getLogger(__name__)
 
@@ -146,13 +147,16 @@ async def _submit_fok(
     try:
         data = await vnx.add_order(payload)
     except Exception as exc:
+        err_msg = str(exc)[:300]
+        if is_vnx_collision_error(err_msg):
+            logger.warning("VNX addOrder contention: %s", err_msg)
         return PlatformOrderResult(
             success=False,
             side=side,
             quantity=qty,
             price=price,
             clordid=payload["clordid"],
-            error=str(exc)[:300],
+            error=err_msg,
         )
 
     if data.get("result") != "success":
@@ -200,7 +204,7 @@ async def _submit_fok_with_retry(
     import asyncio
     import os
 
-    max_attempts = int(os.getenv("VNX_ORDER_RETRY_MAX", "3"))
+    max_attempts = max(int(os.getenv("VNX_ORDER_RETRY_MAX", "3")), collision_retry_max())
     last: PlatformOrderResult | None = None
     for attempt in range(max_attempts):
         result = await _submit_fok(
@@ -209,9 +213,10 @@ async def _submit_fok_with_retry(
         if result.success:
             return result
         last = result
-        err = (result.error or "").lower()
-        retryable = any(
-            k in err
+        err = result.error or ""
+        collision = is_vnx_collision_error(err)
+        retryable = collision or any(
+            k in err.lower()
             for k in (
                 "retry",
                 "unavailable",
@@ -223,15 +228,22 @@ async def _submit_fok_with_retry(
             )
         )
         if not retryable or attempt + 1 >= max_attempts:
+            if collision:
+                logger.warning(
+                    "VNX order gave up after %s attempts (platform contention): %s",
+                    attempt + 1,
+                    err,
+                )
             return result
         by_symbol, q_err = await _load_bid_ask_with_retry(vnx)
         if q_err:
-            await asyncio.sleep(4.0)
+            await asyncio.sleep(collision_backoff_sec(attempt) if collision else 4.0)
             continue
         bid, _, ask, _ = _quote_side_prices(by_symbol, VCHF_USDC)
         price = _limit_price(side, bid, ask, bot_cfg.slippage_bps)
-        logger.warning("VNX order retry %s/%s after: %s", attempt + 2, max_attempts, result.error)
-        await asyncio.sleep(2.0 + attempt)
+        wait = collision_backoff_sec(attempt) if collision else 2.0 + attempt
+        logger.warning("VNX order retry %s/%s after: %s", attempt + 2, max_attempts, err)
+        await asyncio.sleep(wait)
     return last or PlatformOrderResult(
         success=False, side=side, quantity=quantity, price=price, clordid="", error="order failed"
     )
