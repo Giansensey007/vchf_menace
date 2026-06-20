@@ -118,6 +118,7 @@ def _apply(stack: ExitStack, sim: LoopSimulation, *, dry_run: bool = True) -> No
 
     stack.enter_context(patch(f"{MOD}.simulate_loop", new=AsyncMock(return_value=sim)))
     stack.enter_context(patch(f"{MOD}.is_dry_run", new=MagicMock(return_value=dry_run)))
+    stack.enter_context(patch(f"{MOD}.log_cycle_step", new=MagicMock()))
     stack.enter_context(patch(f"{MOD}.CeloExecutor", new=MagicMock(return_value=_evm_mock())))
     stack.enter_context(patch(f"{MOD}.BaseExecutor", new=MagicMock(return_value=_evm_mock())))
     stack.enter_context(patch(f"{MOD}.EthereumExecutor", new=MagicMock(return_value=_evm_mock())))
