@@ -18,7 +18,8 @@ def test_check_usdc_deposit_allows_above_min():
 
 
 @pytest.mark.asyncio
-async def test_usdc_bridge_dry_run_deposit():
+async def test_usdc_bridge_dry_run_deposit(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("DRY_RUN", "true")
     from src.vnx.usdc_bridge import VnxUsdcBridge
 
     cfg = load_bot_config()
