@@ -24,8 +24,8 @@ KIND_CCTP_BURN = "cctp_burn"
 KIND_WORMHOLE_BURN = "wormhole_burn"
 
 _BLOCKCHAIN_ALIASES = {
-    "celo": "CELO",
-    "CELO": "CELO",
+    "celo": "BASE",
+    "BASE": "BASE",
     "solana": "SOL",
     "sol": "SOL",
     "SOL": "SOL",
@@ -72,17 +72,17 @@ def _norm_blockchain(blockchain: str) -> str:
 
 
 def read_on_chain_token_balances(chains: Any, token: Any) -> tuple[float, float]:
-    """Return (celo_token, sol_token) UI balances for reconcile baselines."""
+    """Return (base_token, sol_token) UI balances for reconcile baselines."""
     from src.config_loader import token_decimals
-    from src.execution.celo import CeloExecutor
+    from src.execution.base import BaseExecutor
     from src.execution.solana import SolanaExecutor
     from src.quotes.types import to_human
     from spl.token.instructions import get_associated_token_address
     from solders.pubkey import Pubkey
 
-    celo = CeloExecutor(chains["celo"])
+    base = BaseExecutor(chains["base"])
     dec = token_decimals(token, "celo")
-    celo_bal = float(to_human(celo.balance_erc20(token.chains["celo"]), dec))
+    celo_bal = float(to_human(celo.balance_erc20(token.chains["base"]), dec))
     sol = SolanaExecutor(chains["solana"])
     sdec = token_decimals(token, "solana")
     try:
@@ -210,13 +210,13 @@ class InFlightLedger:
         direction: str,
         txids: list | None = None,
         *,
-        baseline_celo_token: float | None = None,
+        baseline_base_token: float | None = None,
         baseline_sol_token: float | None = None,
         baseline_platform_token: float | None = None,
     ) -> InFlightRecord:
         extra: dict[str, Any] = {}
-        if baseline_celo_token is not None:
-            extra["baseline_celo_token"] = baseline_celo_token
+        if baseline_base_token is not None:
+            extra["baseline_base_token"] = baseline_base_token
         if baseline_sol_token is not None:
             extra["baseline_sol_token"] = baseline_sol_token
         if baseline_platform_token is not None:
@@ -302,7 +302,7 @@ class InFlightLedger:
         return [
             r
             for r in self.pending_vnx_withdraws()
-            if r.blockchain == bc or (bc == "CELO" and r.blockchain == "CELO")
+            if r.blockchain == bc or (bc == "BASE" and r.blockchain == "BASE")
         ]
 
     def total_pending_to_blockchain(self, blockchain: str) -> float:
@@ -346,7 +346,7 @@ class InFlightLedger:
         self,
         *,
         platform_token: float,
-        celo_token: float,
+        base_token: float,
         sol_token: float,
         api_withdrawals: list[PendingVnxWithdraw] | None = None,
     ) -> list[InFlightRecord]:
@@ -358,10 +358,10 @@ class InFlightLedger:
                 continue
             if rec.kind == KIND_VNX_WITHDRAW:
                 bc = rec.blockchain
-                baseline_celo = rec.extra.get("baseline_celo_token")
+                baseline_base = rec.extra.get("baseline_base_token")
                 baseline_sol = rec.extra.get("baseline_sol_token")
-                if bc == "CELO" and baseline_celo is not None:
-                    if celo_token >= float(baseline_celo) + rec.quantity * 0.9:
+                if bc == "BASE" and baseline_base is not None:
+                    if base_token >= float(baseline_base) + rec.quantity * 0.9:
                         rec.status = STATUS_SETTLED
                         rec.settled_at = _now()
                         rec.updated_at = rec.settled_at

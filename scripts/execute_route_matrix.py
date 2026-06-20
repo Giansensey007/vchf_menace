@@ -42,7 +42,7 @@ from src.bridge.hub_eth import (
 )
 from src.bridge.wormhole_queue import WormholeClaimQueue
 from src.config_loader import load_bot_config, load_chains, load_tokens, token_decimals
-from src.execution.celo import CeloExecutor
+from src.execution.base import BaseExecutor
 from src.execution.executor import ArbExecutor, CycleRecord, CycleState
 from src.execution.solana import SolanaExecutor
 from src.execution.tx_log import TX_LOG_PATH, log_platform_order, log_tx
@@ -62,7 +62,7 @@ TEST_VCHF = 31.0
 _ROUTE_SIZE = TEST_VCHF  # overridden by --size CLI flag
 PROBE_VCHF = 5.0  # matches VNX_MIN_DEPOSIT_VCHF_CELO for Celo deposit routes
 PROBE_USDC = 0.4  # minimum Sol USDC for DEX probe when balance < 5
-CELO_MIN_VCHF = 5.0  # VNX platform min cumulative deposit on CELO
+BASE_MIN_VCHF = 5.0  # VNX platform min cumulative deposit on BASE
 CCTP_USDC = 5.0
 ETH_MIN_USDC_DEPOSIT = min_deposit_usdc("ETH")  # VNX cumulative credit min on ETH (default 20)
 HUB_USDC = ETH_MIN_USDC_DEPOSIT  # never deposit ETH USDC to VNX below this
@@ -73,8 +73,8 @@ _cctp_discovered = False
 PRODUCTION_ROUTE_ORDER = (
     "vnx_to_solana",
     "solana_to_vnx",
-    "solana_to_celo",
-    "celo_to_solana",
+    "solana_to_base",
+    "base_to_solana",
 )
 
 
@@ -93,18 +93,18 @@ async def audit() -> None:
     snap = await treasury.snapshot()
     _log(treasury.balance_line(snap))
     _log(InFlightLedger("VCHF").format_audit_block())
-    celo = CeloExecutor(chains["celo"])
+    base = BaseExecutor(chains["base"])
     dec = token_decimals(token, "celo")
-    from src.bridge.celo_usdt import celo_usdt_balances
+    from src.bridge.base_usdc import base_usdc_balances
 
-    celo_bals = celo_usdt_balances(celo)
-    celo_line = (
-        f"Celo: USDT={celo_bals['canonical']:.2f} "
+    base_bals = base_usdc_balances(base)
+    base_line = (
+        f"Base: USDT={base_bals['canonical']:.2f} "
         f"VCHF={to_human(celo.balance_erc20(token.chains['celo']), dec):.4f}"
     )
-    if celo_bals["wrapped_eth"] >= 0.01:
-        celo_line += f" (wrapped ETH-USDT={celo_bals['wrapped_eth']:.2f} — run consolidate-celo-usdt)"
-    _log(celo_line)
+    if base_bals["wrapped_eth"] >= 0.01:
+        base_line += f" (wrapped ETH-USDT={base_bals['wrapped_eth']:.2f} — run consolidate-celo-usdt)"
+    _log(base_line)
     sol = SolanaExecutor(chains["solana"])
     sdec = token_decimals(token, "solana")
     from spl.token.instructions import get_associated_token_address
@@ -138,7 +138,7 @@ async def audit() -> None:
             from src.execution.ethereum import ERC20_ABI
             from web3 import Web3
 
-            wbal = celo.w3.eth.contract(
+            wbal = base.w3.eth.contract(
                 address=Web3.to_checksum_address(wrapped), abi=ERC20_ABI
             ).functions.balanceOf(celo.address).call()
             if wbal > 10_000:
@@ -161,34 +161,34 @@ async def step_wormhole_preflight() -> bool:
     from scripts.check_wormhole_usdt import run as wormhole_check
     from src.bridge.wormhole import WormholePortalBridge
     from src.config_loader import load_bridge_config, load_chains
-    from src.execution.celo import CeloExecutor
+    from src.execution.base import BaseExecutor
     from src.execution.ethereum import EthereumExecutor
     from src.quotes.types import to_human
 
     chains = load_chains()
     wh_cfg = load_bridge_config()["wormhole"]
-    celo = CeloExecutor(chains["celo"])
+    base = BaseExecutor(chains["base"])
     eth = EthereumExecutor(chains["ethereum"])
-    wh = WormholePortalBridge(chains["celo"])
+    wh = WormholePortalBridge(chains["base"])
 
     eth_usdt = float(to_human(eth.balance_erc20(wh_cfg["ethereum_usdt"]), 6))
-    celo_usdt = float(to_human(celo.balance_erc20(chains["celo"].hub_token), 6))
+    celo_usdt = float(to_human(celo.balance_erc20(chains["base"].hub_token), 6))
     probe = min(1.0, eth_usdt * 0.9) if eth_usdt >= 0.05 else 0.0
 
     if probe >= 0.05:
-        eth_ok = wh.simulate_eth_transfer_tokens(probe, celo.address, eth_exec=eth).get("ok")
+        eth_ok = wh.simulate_eth_transfer_tokens(probe, base.address, eth_exec=eth).get("ok")
         _log(f"\n=== Wormhole preflight ETH→Celo (${probe:.2f} USDT): {'OK' if eth_ok else 'FAIL'} ===")
         if not eth_ok:
             return False
     else:
-        _log(f"\n=== Wormhole preflight ETH→Celo: SKIP (ETH USDT {eth_usdt:.2f} — sim when funded) ===")
+        _log(f"\n=== Wormhole preflight ETH→Base: SKIP (ETH USDT {eth_usdt:.2f} — sim when funded) ===")
 
     if celo_usdt >= 0.05:
-        celo_probe = min(1.0, celo_usdt * 0.9)
-        rc = await wormhole_check(celo_probe, execute=False)
-        _log(f"=== Wormhole preflight Celo outbound (${celo_probe:.2f} USDT): {'OK' if rc == 0 else 'FAIL'} ===")
+        base_probe = min(1.0, celo_usdt * 0.9)
+        rc = await wormhole_check(base_probe, execute=False)
+        _log(f"=== Wormhole preflight Celo outbound (${base_probe:.2f} USDT): {'OK' if rc == 0 else 'FAIL'} ===")
         if rc != 0:
-            _log("  (Celo outbound sim failed — may need more canonical USDT or CELO gas)")
+            _log("  (Celo outbound sim failed — may need more canonical USDT or BASE gas)")
             return False
         return True
     _log(f"SKIP Celo→* sim (canonical USDT {celo_usdt:.2f} < 0.05 — fund Celo for outbound)")
@@ -271,15 +271,15 @@ async def _force_exec(direction: str, size: float = TEST_VCHF) -> bool:
     from src.treasury.loops import origin_for_direction
     from src.vnx.deposits import check_deposit_amount
 
-    if direction in ("celo_to_solana", "celo_to_vnx"):
+    if direction in ("base_to_solana", "base_to_vnx"):
         import os
 
-        bc = os.getenv("VNX_CELO_BLOCKCHAIN", "CELO")
+        bc = os.getenv("VNX_CELO_BLOCKCHAIN", "BASE")
         err = check_deposit_amount(bc, size)
         if err:
             _log(f"  SKIP {direction}: {err}")
             return False
-    if direction in ("solana_to_vnx", "solana_to_celo"):
+    if direction in ("solana_to_vnx", "solana_to_base"):
         import os
 
         bc = os.getenv("VNX_SOL_BLOCKCHAIN", "SOL")
@@ -324,61 +324,61 @@ async def _force_exec(direction: str, size: float = TEST_VCHF) -> bool:
         if result.return_leg and result.return_direction:
             _log_cycle_txs(result.return_direction, result.return_leg)
 
-        if direction in ("vnx_to_solana", "solana_to_vnx", "celo_to_solana", "solana_to_celo"):
+        if direction in ("vnx_to_solana", "solana_to_vnx", "base_to_solana", "solana_to_base"):
             await step_cctp_claim()
 
         return result.closed
 
 
-async def step_celo_swaps() -> bool:
+async def step_base_swaps() -> bool:
     _log("\n=== Celo buy/sell probe ===")
     chains = load_chains()
     token = load_tokens()["VCHF"]
-    celo = CeloExecutor(chains["celo"])
+    base = BaseExecutor(chains["base"])
     dec = token_decimals(token, "celo")
-    usdt_token = chains["celo"].hub_token
-    usdt_bal = float(to_human(celo.balance_erc20(usdt_token), chains["celo"].hub_decimals))
-    vchf_raw = celo.balance_erc20(token.chains["celo"])
+    usdt_token = chains["base"].hub_token
+    usdt_bal = float(to_human(celo.balance_erc20(usdt_token), chains["base"].hub_decimals))
+    vchf_raw = base.balance_erc20(token.chains["base"])
 
     # Prefer USDT→VCHF→USDT when USDT funded; else round-trip existing VCHF
     if usdt_bal >= PROBE_USDC:
-        usdt_in = from_human(min(5.0, usdt_bal * 0.9), chains["celo"].hub_decimals)
-        sim = celo.simulate_swap(usdt_token, token.chains["celo"], usdt_in, 100)
+        usdt_in = from_human(min(5.0, usdt_bal * 0.9), chains["base"].hub_decimals)
+        sim = base.simulate_swap(usdt_token, token.chains["base"], usdt_in, 100)
         if not sim:
-            _log("FAIL celo buy quote")
+            _log("FAIL base buy quote")
             return False
         min_out = int(sim["amount_out"] * 0.97)
-        tx1 = celo.swap_exact_input(usdt_token, token.chains["celo"], usdt_in, min_out)
+        tx1 = base.swap_exact_input(usdt_token, token.chains["base"], usdt_in, min_out)
         if not tx1:
-            _log("FAIL celo buy")
+            _log("FAIL base buy")
             return False
         log_tx("probe_celo_buy_vchf", "celo", tx1)
-        vchf_raw = celo.balance_erc20(token.chains["celo"])
+        vchf_raw = base.balance_erc20(token.chains["base"])
     elif vchf_raw > 0:
         _log(f"  USDT low ({usdt_bal:.2f}) — round-trip {float(to_human(vchf_raw, dec)):.4f} VCHF")
     else:
-        _log(f"FAIL celo swaps — no USDT ({usdt_bal:.2f}) or VCHF on Celo")
+        _log(f"FAIL base swaps — no USDT ({usdt_bal:.2f}) or VCHF on Celo")
         return False
 
-    sell_sim = celo.simulate_swap(token.chains["celo"], usdt_token, vchf_raw, 100)
-    min_usdt = int(sell_sim["amount_out"] * 0.97) if sell_sim else int(0.01 * 10**chains["celo"].hub_decimals)
-    tx2 = celo.swap_exact_input(token.chains["celo"], usdt_token, vchf_raw, min_usdt)
+    sell_sim = base.simulate_swap(token.chains["base"], usdt_token, vchf_raw, 100)
+    min_usdt = int(sell_sim["amount_out"] * 0.97) if sell_sim else int(0.01 * 10**chains["base"].hub_decimals)
+    tx2 = base.swap_exact_input(token.chains["base"], usdt_token, vchf_raw, min_usdt)
     if not tx2:
-        _log("FAIL celo sell")
+        _log("FAIL base sell")
         return False
     log_tx("probe_celo_sell_vchf", "celo", tx2)
 
     if usdt_bal >= PROBE_USDC:
         return True
     # VCHF-only round trip: buy back with USDT received
-    usdt_after = celo.balance_erc20(usdt_token)
+    usdt_after = base.balance_erc20(usdt_token)
     if usdt_after <= 0:
         return True
-    buy_sim = celo.simulate_swap(usdt_token, token.chains["celo"], usdt_after, 100)
+    buy_sim = base.simulate_swap(usdt_token, token.chains["base"], usdt_after, 100)
     if not buy_sim:
         return True
     min_vchf = int(buy_sim["amount_out"] * 0.97)
-    tx3 = celo.swap_exact_input(usdt_token, token.chains["celo"], usdt_after, min_vchf)
+    tx3 = base.swap_exact_input(usdt_token, token.chains["base"], usdt_after, min_vchf)
     if tx3:
         log_tx("probe_celo_buy_vchf", "celo", tx3)
     return bool(tx3)
@@ -444,15 +444,15 @@ async def step_sol_swaps() -> bool:
 
 async def step_consolidate_celo_usdt() -> bool:
     """Swap Wormhole wrapped ETH-USDT → canonical Celo USDT (hub token for all routes)."""
-    from src.bridge.celo_usdt import celo_usdt_balances, consolidate_wrapped_to_canonical
+    from src.bridge.base_usdc import base_usdc_balances, consolidate_wrapped_to_canonical
 
-    before = celo_usdt_balances()
+    before = base_usdc_balances()
     _log(f"\n=== Celo USDT consolidate (wrapped→canonical) before: {before} ===")
     if before["wrapped_eth"] < 0.01:
         _log("  SKIP — no wrapped USDT")
         return True
     r = consolidate_wrapped_to_canonical()
-    after = celo_usdt_balances()
+    after = base_usdc_balances()
     _log(f"  {'OK' if r['success'] else 'FAIL'} tx={r.get('tx')} after: {after} err={r.get('error')}")
     return r["success"]
 
@@ -489,9 +489,9 @@ async def step_vnx_to_eth() -> bool:
 async def step_wormhole_celo_to_eth() -> bool:
     amount = await _hub_usdt_amount()
     if amount < 0.05:
-        _log(f"\n=== Wormhole CELO→ETH — SKIP (canonical USDT < 0.05) ===")
+        _log(f"\n=== Wormhole BASE→ETH — SKIP (canonical USDT < 0.05) ===")
         return False
-    _log(f"\n=== Wormhole CELO→ETH ${amount:.2f} USDT (initiate+redeem) ===")
+    _log(f"\n=== Wormhole BASE→ETH ${amount:.2f} USDT (initiate+redeem) ===")
     async with build_client() as client:
         r = await wormhole_celo_to_eth(client, amount)
         br = r.get("wormhole")
@@ -505,7 +505,7 @@ async def step_wormhole_celo_to_eth() -> bool:
 
 
 async def step_eth_usdt_to_sol() -> bool:
-    """Complete CELO→ETH→SOL: swap ETH USDT → USDC → CCTP → Sol."""
+    """Complete BASE→ETH→SOL: swap ETH USDT → USDC → CCTP → Sol."""
     from scripts.rebalance_for_test import _balances
     from src.config_loader import load_bridge_config
 
@@ -520,7 +520,7 @@ async def step_eth_usdt_to_sol() -> bool:
     if amount < 0.5:
         _log(f"\n=== ETH USDT → SOL — SKIP (ETH USDT {usdt_bal:.2f} < 0.5) ===")
         return False
-    _log(f"\n=== Complete CELO→ETH→SOL: ETH USDT→USDC→CCTP→Sol (${amount:.2f}) ===")
+    _log(f"\n=== Complete BASE→ETH→SOL: ETH USDT→USDC→CCTP→Sol (${amount:.2f}) ===")
     async with build_client() as client:
         r = await eth_usdt_to_sol_usdc(client, amount)
         _log(
@@ -542,9 +542,9 @@ async def step_wormhole_eth_to_celo() -> bool:
     usdt_bal = float(to_human(eth.balance_erc20(wh["ethereum_usdt"]), 6))
     amount = min(HUB_USDT, usdt_bal * 0.85)
     if amount < PROBE_USDC:
-        _log(f"\n=== Wormhole ETH→CELO — SKIP (ETH USDT {usdt_bal:.2f} < {PROBE_USDC}) ===")
+        _log(f"\n=== Wormhole ETH→BASE — SKIP (ETH USDT {usdt_bal:.2f} < {PROBE_USDC}) ===")
         return False
-    _log(f"\n=== Wormhole ETH→CELO ${amount:.2f} USDT (initiate+redeem) ===")
+    _log(f"\n=== Wormhole ETH→BASE ${amount:.2f} USDT (initiate+redeem) ===")
     async with build_client() as client:
         r = await wormhole_eth_to_celo(client, amount)
         br = r.get("wormhole")
@@ -561,9 +561,9 @@ async def step_celo_usdt_to_vnx() -> bool:
     amount = HUB_USDC  # must meet VNX ETH USDC cumulative minimum after wormhole+swap
     dep_err = check_usdc_deposit_amount("ETH", amount * 0.99)
     if dep_err:
-        _log(f"\n=== CELO USDT → VNX — SKIP (expected USDC ~{amount * 0.99:.2f}): {dep_err} ===")
+        _log(f"\n=== BASE USDT → VNX — SKIP (expected USDC ~{amount * 0.99:.2f}): {dep_err} ===")
         return False
-    _log(f"\n=== CELO USDT → ETH USDC → VNX ${amount} ===")
+    _log(f"\n=== BASE USDT → ETH USDC → VNX ${amount} ===")
     async with build_client() as client:
         r = await celo_usdt_to_vnx_usdc(client, amount)
         _log(f"  {'OK' if r['success'] else 'FAIL'} stage={r.get('stage')} err={r.get('error')}")
@@ -592,13 +592,13 @@ async def _hub_usdc_amount() -> float:
     return min(CCTP_USDC, avail)
 
 
-async def step_hub_celo_eth_sol() -> bool:
-    """CELO USDT → Wormhole → ETH USDT → swap USDC → CCTP → Sol USDC."""
+async def step_hub_base_eth_sol() -> bool:
+    """BASE USDT → Wormhole → ETH USDT → swap USDC → CCTP → Sol USDC."""
     amount = await _hub_usdt_amount()
     if amount < PROBE_USDC:
-        _log(f"\n=== Hub triangle CELO → ETH → SOL — SKIP (Celo USDT < {PROBE_USDC}) ===")
+        _log(f"\n=== Hub triangle BASE → ETH → SOL — SKIP (Celo USDT < {PROBE_USDC}) ===")
         return False
-    _log(f"\n=== Hub triangle CELO → ETH → SOL (${amount:.2f} USDT) ===")
+    _log(f"\n=== Hub triangle BASE → ETH → SOL (${amount:.2f} USDT) ===")
     async with build_client() as client:
         r = await celo_usdt_to_sol_usdc(client, amount)
         _log(
@@ -613,12 +613,12 @@ async def step_hub_celo_eth_sol() -> bool:
 
 
 async def step_hub_sol_eth_celo() -> bool:
-    """Sol USDC → CCTP → ETH USDC → swap USDT → Wormhole → CELO USDT."""
+    """Sol USDC → CCTP → ETH USDC → swap USDT → Wormhole → BASE USDT."""
     amount = await _hub_usdc_amount()
     if amount < PROBE_USDC:
-        _log(f"\n=== Hub triangle SOL → ETH → CELO — SKIP (Sol USDC < {PROBE_USDC}) ===")
+        _log(f"\n=== Hub triangle SOL → ETH → BASE — SKIP (Sol USDC < {PROBE_USDC}) ===")
         return False
-    _log(f"\n=== Hub triangle SOL → ETH → CELO (${amount:.2f} USDC) ===")
+    _log(f"\n=== Hub triangle SOL → ETH → BASE (${amount:.2f} USDC) ===")
     async with build_client() as client:
         r = await sol_usdc_to_celo_usdt(client, amount)
         _log(
@@ -639,7 +639,7 @@ async def step_hub_sol_eth_celo() -> bool:
 
 
 async def step_wormhole_celo_to_sol() -> bool:
-    _log(f"\n=== Wormhole CELO→SOL direct ${HUB_USDT} USDT ===")
+    _log(f"\n=== Wormhole BASE→SOL direct ${HUB_USDT} USDT ===")
     async with build_client() as client:
         r = await wormhole_celo_to_sol_direct(client, HUB_USDT)
         br = r.get("wormhole")
@@ -654,7 +654,7 @@ async def step_wormhole_celo_to_sol() -> bool:
 
 async def step_hub_cross_chain() -> bool:
     """Run both hub triangles with claim workers between legs."""
-    ok_a = await step_hub_celo_eth_sol()
+    ok_a = await step_hub_base_eth_sol()
     await step_cctp_claim()
     await step_wormhole_claim(max_rounds=60)
     await audit()
@@ -665,7 +665,7 @@ async def step_hub_cross_chain() -> bool:
     return ok_a and ok_b
 
 
-async def step_closed_loop_celo(size: float = TEST_VCHF) -> bool:
+async def step_closed_loop_base(size: float = TEST_VCHF) -> bool:
     """Celo USDT → arb → return to Celo USDT when round-trip is economic."""
     from src.treasury.manager import TreasuryManager
 
@@ -703,15 +703,15 @@ async def step_cctp_sol_to_eth() -> bool:
 
 
 async def step_eth_usdc_to_celo() -> bool:
-    """Complete SOL→ETH→CELO triangle: ETH USDC → swap USDT → Wormhole → Celo."""
+    """Complete SOL→ETH→BASE triangle: ETH USDC → swap USDT → Wormhole → Celo."""
     from scripts.rebalance_for_test import _balances
 
     b = await _balances()
     amount = min(HUB_USDC, b.get("eth_usdc", 0) * 0.95)
     if amount < 1.0:
-        _log("\n=== ETH USDC → CELO — SKIP (ETH USDC < 1) ===")
+        _log("\n=== ETH USDC → BASE — SKIP (ETH USDC < 1) ===")
         return False
-    _log(f"\n=== ETH USDC → swap USDT → Wormhole CELO (${amount:.2f} USDC) ===")
+    _log(f"\n=== ETH USDC → swap USDT → Wormhole BASE (${amount:.2f} USDC) ===")
     async with build_client() as client:
         r = await wormhole_eth_to_celo_via_usdc(client, amount)
         _log(
@@ -797,7 +797,7 @@ async def run_full_matrix() -> int:
         ("wormhole_celo_to_eth", step_wormhole_celo_to_eth),
         ("wormhole_eth_to_celo", step_wormhole_eth_to_celo),
         ("celo_usdt_to_vnx", step_celo_usdt_to_vnx),
-        ("hub_celo_eth_sol", step_hub_celo_eth_sol),
+        ("hub_base_eth_sol", step_hub_base_eth_sol),
         ("hub_sol_eth_celo", step_hub_sol_eth_celo),
         ("wormhole_celo_to_sol_direct", step_wormhole_celo_to_sol),
     )
@@ -815,8 +815,8 @@ async def run_full_matrix() -> int:
     bridge_steps = (
         ("cctp_sol_to_eth", step_cctp_sol_to_eth),
         ("cctp_eth_to_sol", step_cctp_eth_to_sol),
-        ("wormhole_celo_sol_eth", step_wormhole_usdt_check),
-        ("celo_swaps", step_celo_swaps),
+        ("wormhole_base_sol_eth", step_wormhole_usdt_check),
+        ("base_swaps", step_base_swaps),
         ("sol_swaps", step_sol_swaps),
     )
     for name, fn in bridge_steps:
@@ -896,7 +896,7 @@ async def run_production() -> int:
         await step_cctp_claim()
         await audit()
 
-    for probe in ("celo-swaps", "sol-swaps", "wormhole-usdt"):
+    for probe in ("base-swaps", "sol-swaps", "wormhole-usdt"):
         _log(f"\n--- Probe: {probe} ---")
         try:
             results[probe] = await STEPS[probe]()
@@ -981,6 +981,11 @@ async def step_simulate_all_routes() -> bool:
 async def step_verify_all() -> bool:
     """Max verification: claims, readiness, bridge sims, DEX probes, route sims."""
     _log("\n========== VERIFY ALL (production preflight) ==========")
+    from src.treasury.in_flight import InFlightLedger
+
+    purged = InFlightLedger("VCHF").purge_stale_pending()
+    if purged:
+        _log(f"Purged {purged} stale in-flight record(s) (>48h pending)")
     results: dict[str, bool] = {}
 
     results["cctp_claim"] = await step_cctp_claim()
@@ -1002,18 +1007,18 @@ async def step_verify_all() -> bool:
 
     b = await _balances()
     celo_usdt = b.get("celo_usdt", 0)
-    celo_vchf = b.get("celo_vchf", 0)
-    celo_wrapped = prod_bal.get("celo_usdt_wrapped_eth", 0)
-    if celo_wrapped >= 0.01:
-        _log(f"\n=== Celo wrapped USDT {celo_wrapped:.2f} — consolidating to canonical ===")
+    base_vchf = b.get("base_vchf", 0)
+    base_wrapped = prod_bal.get("celo_usdt_wrapped_eth", 0)
+    if base_wrapped >= 0.01:
+        _log(f"\n=== Celo wrapped USDT {base_wrapped:.2f} — consolidating to canonical ===")
         await step_consolidate_celo_usdt()
         b = await _balances()
         celo_usdt = b.get("celo_usdt", 0)
-    if celo_usdt >= PROBE_USDC or celo_vchf >= 0.5:
-        results["celo_swaps"] = await step_celo_swaps()
+    if celo_usdt >= PROBE_USDC or base_vchf >= 0.5:
+        results["base_swaps"] = await step_base_swaps()
     else:
-        _log(f"\nSKIP celo-swaps (USDT {celo_usdt:.2f}, VCHF {celo_vchf:.2f})")
-        results["celo_swaps"] = False
+        _log(f"\nSKIP base-swaps (USDT {celo_usdt:.2f}, VCHF {base_vchf:.2f})")
+        results["base_swaps"] = False
 
     if b.get("sol_usdc", 0) >= PROBE_USDC:
         results["sol_swaps"] = await step_sol_swaps()
@@ -1103,31 +1108,31 @@ STEPS = {
     "cctp-claim": step_cctp_claim,
     "platform-buy": step_platform_buy,
     "platform-sell": step_platform_sell,
-    "celo-swaps": step_celo_swaps,
+    "base-swaps": step_base_swaps,
     "sol-swaps": step_sol_swaps,
     "wormhole-usdt": step_wormhole_usdt_check,
     "vnx-to-sol": lambda: _force_exec("vnx_to_solana", _ROUTE_SIZE),
     "sol-to-vnx": lambda: _force_exec("solana_to_vnx", _ROUTE_SIZE),
-    "sol-to-celo": lambda: _force_exec("solana_to_celo", _ROUTE_SIZE),
-    "celo-to-sol": lambda: _force_exec("celo_to_solana", _ROUTE_SIZE),
-    "celo-to-vnx": lambda: _force_exec("celo_to_vnx", _ROUTE_SIZE),
-    "vnx-to-celo": lambda: _force_exec("vnx_to_celo", _ROUTE_SIZE),
+    "sol-to-base": lambda: _force_exec("solana_to_base", _ROUTE_SIZE),
+    "base-to-sol": lambda: _force_exec("base_to_solana", _ROUTE_SIZE),
+    "base-to-vnx": lambda: _force_exec("base_to_vnx", _ROUTE_SIZE),
+    "vnx-to-base": lambda: _force_exec("vnx_to_base", _ROUTE_SIZE),
     "cctp-sol-eth": step_cctp_sol_to_eth,
     "cctp-eth-sol": step_cctp_eth_to_sol,
     "wormhole-claim": step_wormhole_claim,
     "consolidate-celo-usdt": step_consolidate_celo_usdt,
     "eth-to-vnx": step_eth_to_vnx,
     "vnx-to-eth": step_vnx_to_eth,
-    "wormhole-celo-eth": step_wormhole_celo_to_eth,
+    "wormhole-base-eth": step_wormhole_celo_to_eth,
     "wormhole-eth-celo": step_wormhole_eth_to_celo,
-    "celo-usdt-to-vnx": step_celo_usdt_to_vnx,
-    "hub-celo-eth-sol": step_hub_celo_eth_sol,
+    "base-usdc-to-vnx": step_celo_usdt_to_vnx,
+    "hub-celo-eth-sol": step_hub_base_eth_sol,
     "hub-sol-eth-celo": step_hub_sol_eth_celo,
     "hub-cross-chain": step_hub_cross_chain,
-    "eth-usdc-to-celo": step_eth_usdc_to_celo,
+    "eth-usdc-to-base": step_eth_usdc_to_celo,
     "eth-usdt-to-sol": step_eth_usdt_to_sol,
-    "wormhole-celo-sol": step_wormhole_celo_to_sol,
-    "closed-loop-celo": step_closed_loop_celo,
+    "wormhole-base-sol": step_wormhole_celo_to_sol,
+    "closed-loop-celo": step_closed_loop_base,
     "rebalance": lambda: step_rebalance(execute=True),
     "production": run_production,
     "scan": step_profit_scan,

@@ -13,14 +13,15 @@ from typing import Any
 import httpx
 
 from src.bridge.wormhole_vaa import fetch_signed_vaa, fetch_vaa_by_tx_hash, token_bridge_emitter
-from src.config_loader import ROOT, is_dry_run, load_bridge_config, load_chains
-from src.execution.celo import CeloExecutor
+from src.config_loader import data_dir, is_dry_run, load_bridge_config, load_chains
+from src.execution.base import BaseExecutor
 from src.execution.ethereum import EthereumExecutor
 from src.execution.tx_log import log_tx
 
 logger = logging.getLogger(__name__)
 
-QUEUE_PATH = ROOT / "data" / "wormhole_queue.json"
+def wormhole_queue_path() -> Path:
+    return data_dir() / "wormhole_queue.json"
 
 
 class WormholeQueueStatus(str, Enum):
@@ -71,7 +72,7 @@ class WormholeClaimQueue:
     """Track Wormhole Portal initiates awaiting VAA + completeTransfer on destination."""
 
     def __init__(self, path: Path | None = None) -> None:
-        self.path = path or QUEUE_PATH
+        self.path = path or wormhole_queue_path()
         self.cfg = load_bridge_config()["wormhole"]
         self._store = self.load()
 
@@ -195,7 +196,7 @@ class WormholeClaimQueue:
                 if dest_tx != "already-claimed":
                     log_tx(item.intent, item.dest_chain, dest_tx)
                 if item.dest_chain == "celo" and "eth" in item.source_chain:
-                    from src.bridge.celo_usdt import consolidate_after_eth_to_celo_redeem
+                    from src.bridge.base_usdc import consolidate_after_eth_to_celo_redeem
 
                     con = await consolidate_after_eth_to_celo_redeem()
                     if con.get("success") and not con.get("skipped"):
@@ -239,7 +240,7 @@ class WormholeClaimQueue:
         tx = item.source_tx if item.source_tx.startswith("0x") else f"0x{item.source_tx}"
         try:
             if item.source_chain == "celo":
-                exec_ = CeloExecutor(chains["celo"])
+                exec_ = BaseExecutor(chains["base"])
                 return WormholePortalBridge._initiate_receipt_ok(exec_.w3, tx)
             if item.source_chain == "ethereum":
                 eth = EthereumExecutor(chains["ethereum"])
@@ -256,9 +257,9 @@ class WormholeClaimQueue:
         tx = item.source_tx if item.source_tx.startswith("0x") else f"0x{item.source_tx}"
         try:
             if item.source_chain == "celo":
-                from src.execution.celo import CeloExecutor
+                from src.execution.base import BaseExecutor
 
-                exec_ = CeloExecutor(chains["celo"])
+                exec_ = BaseExecutor(chains["base"])
                 rcpt = exec_.w3.eth.get_transaction_receipt(tx)
             elif item.source_chain == "ethereum":
                 eth = EthereumExecutor(chains["ethereum"])
@@ -289,16 +290,16 @@ class WormholeClaimQueue:
             bridge = self.cfg.get("ethereum_token_bridge") or ""
             return eth.complete_transfer_wormhole(bridge, vaa)
         if item.dest_chain == "celo":
-            celo = CeloExecutor(chains["celo"])
-            bridge = self.cfg["celo_token_bridge"]
-            return celo.complete_transfer_wormhole(bridge, vaa)
+            base = BaseExecutor(chains["base"])
+            bridge = self.cfg["base_token_bridge"]
+            return base.complete_transfer_wormhole(bridge, vaa)
         raise ValueError(f"unsupported wormhole dest {item.dest_chain}")
 
     @staticmethod
     def emitter_for_chain(chain: str) -> str:
         wh = load_bridge_config()["wormhole"]
         if chain == "celo":
-            return token_bridge_emitter(wh["celo_token_bridge"])
+            return token_bridge_emitter(wh["base_token_bridge"])
         if chain == "ethereum":
             return token_bridge_emitter(wh["ethereum_token_bridge"])
         raise ValueError(f"no wormhole emitter for {chain}")

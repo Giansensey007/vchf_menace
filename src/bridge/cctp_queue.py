@@ -15,7 +15,7 @@ import httpx
 
 from src.bridge.cctp_iris import CctpAttestation, fetch_messages, normalize_cctp_tx_hash
 from src.bridge.cctp_sol import run_receive_sol, sol_usdc_ata
-from src.config_loader import ROOT, is_dry_run, load_bridge_config, load_chains
+from src.config_loader import data_dir, is_dry_run, load_bridge_config, load_chains
 from src.execution.ethereum import EthereumExecutor
 from src.execution.solana import SolanaExecutor
 from src.execution.tx_log import log_tx
@@ -23,7 +23,8 @@ from src.quotes.rpc_json import post_json_rpc_sync
 
 logger = logging.getLogger(__name__)
 
-QUEUE_PATH = ROOT / "data" / "cctp_queue.json"
+def cctp_queue_path() -> Path:
+    return data_dir() / "cctp_queue.json"
 
 SOL_CCTP_PROGRAM = "CCTPV2vPZJS2u2BBsUoscuikbYjnpFmbFsvVuJdgUMQe"
 ETH_TOKEN_MESSENGER = "0x28b5a0e9c621a5badaa536219b3a228c8168cf5d"
@@ -94,7 +95,7 @@ class CctpClaimQueue:
     """Track CCTP burns awaiting attestation/claim; poll Iris and receive on dest chain."""
 
     def __init__(self, path: Path | None = None) -> None:
-        self.path = path or QUEUE_PATH
+        self.path = path or cctp_queue_path()
         self.cfg = load_bridge_config()["cctp"]
         self._store = self.load()
 

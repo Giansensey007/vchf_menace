@@ -47,7 +47,7 @@ class VnxUsdcBridge:
         self.withdraw_label = eth_label
         if eth_label == os.getenv("VNX_CELO_WITHDRAW_LABEL", "").strip():
             logger.warning(
-                "VNX_ETH_WITHDRAW_LABEL matches CELO label — USDC withdraw requires ETH whitelist label "
+                "VNX_ETH_WITHDRAW_LABEL matches BASE label — USDC withdraw requires ETH whitelist label "
                 "(e.g. arb_explorer_mainnet_USDC)"
             )
 

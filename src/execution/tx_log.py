@@ -7,14 +7,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from src.config_loader import ROOT
+from src.config_loader import data_dir
 
 logger = logging.getLogger(__name__)
 
-TX_LOG_PATH = ROOT / "data" / "tx_log.jsonl"
+
+def tx_log_path() -> Path:
+    return data_dir() / "tx_log.jsonl"
 
 EXPLORERS: dict[str, str] = {
-    "celo": "https://celoscan.io/tx/{tx}",
+    "base": "https://basescan.org/tx/{tx}",
     "ethereum": "https://etherscan.io/tx/{tx}",
     "eth": "https://etherscan.io/tx/{tx}",
     "solana": "https://solscan.io/tx/{tx}",
@@ -64,9 +66,10 @@ def log_tx(
         ok=ok,
         extra=extra or {},
     )
-    TX_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    path = tx_log_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
     line = json.dumps(asdict(rec), ensure_ascii=False)
-    with TX_LOG_PATH.open("a", encoding="utf-8") as f:
+    with path.open("a", encoding="utf-8") as f:
         f.write(line + "\n")
     status = "OK" if ok else "FAIL"
     url_part = f" {rec.url}" if rec.url else ""

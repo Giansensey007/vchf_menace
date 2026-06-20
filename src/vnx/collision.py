@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import os
+from typing import Any
 
 # Substrings indicating VNX platform contention (GBP + VCHF share one account).
 _COLLISION_MARKERS: tuple[str, ...] = (
+    "invalid_nonce",
+    "invalid nonce",
     "invalid_request_limit",
     "concurrent",
     "in flight",
@@ -39,3 +42,12 @@ def is_vnx_collision_error(message: str | None) -> bool:
         return False
     text = message.lower()
     return any(marker in text for marker in _COLLISION_MARKERS)
+
+
+def vnx_error_message(resp: dict[str, Any]) -> str | None:
+    """Extract error text from a VNX private API response, if any."""
+    if resp.get("result") != "error":
+        return None
+    err = resp.get("error") or {}
+    msg = err.get("message") or err.get("code")
+    return str(msg) if msg else "unknown VNX error"

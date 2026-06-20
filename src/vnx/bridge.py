@@ -98,7 +98,7 @@ class VnxBridge:
         deposit_only: bool = False,
     ) -> BridgeResult:
         """
-        direction: e.g. celo_to_solana
+        direction: e.g. base_to_solana
         deposit_tx_builder: async callable(deposit_address) -> tx_hash | None
         withdraw_only: withdraw platform VCHF to whitelisted label (vnx_to_* routes)
         deposit_only: on-chain deposit + wait for platform credit; no withdraw (chain_to_vnx)
@@ -201,7 +201,7 @@ class VnxBridge:
                     dest_label,
                     direction,
                     txids,
-                    baseline_celo_token=celo_base,
+                    baseline_base_token=celo_base,
                     baseline_sol_token=sol_base,
                     baseline_platform_token=balance,
                 )
@@ -281,7 +281,7 @@ class VnxBridge:
                     False,
                     False,
                     "deposit not credited in time "
-                    "(check VNX min deposit per chain — CELO requires cumulative ≥5 VCHF)",
+                    "(check VNX min deposit per chain — BASE requires cumulative ≥5 VCHF)",
                 )
 
             if deposit_only:
@@ -350,7 +350,7 @@ class VnxBridge:
                     dest_label,
                     direction,
                     txids,
-                    baseline_celo_token=celo_base,
+                    baseline_base_token=celo_base,
                     baseline_sol_token=sol_base,
                     baseline_platform_token=balance,
                 )

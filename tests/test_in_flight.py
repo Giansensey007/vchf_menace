@@ -26,19 +26,19 @@ def test_reconcile_settles_vnx_withdraw_on_celo_arrival(ledger_path: Path) -> No
     ledger = InFlightLedger("VCHF", ledger_path)
     ledger.log_vnx_withdraw(
         9.55,
-        "CELO",
-        "celo-hot",
-        "vnx_to_celo",
+        "BASE",
+        "base-hot",
+        "vnx_to_base",
         txids=["wd-1"],
-        baseline_celo_token=0.0,
+        baseline_base_token=0.0,
         baseline_sol_token=0.0,
         baseline_platform_token=50.0,
     )
-    active = ledger.reconcile(platform_token=40.0, celo_token=0.0, sol_token=0.0)
+    active = ledger.reconcile(platform_token=40.0, base_token=0.0, sol_token=0.0)
     assert len(active) == 1
     assert active[0].status == STATUS_PENDING
 
-    ledger.reconcile(platform_token=40.0, celo_token=9.5, sol_token=0.0)
+    ledger.reconcile(platform_token=40.0, base_token=9.5, sol_token=0.0)
     records = ledger.read_all()
     settled = [r for r in records if r.kind == KIND_VNX_WITHDRAW]
     assert settled[0].status == STATUS_SETTLED
@@ -50,8 +50,8 @@ def test_parse_vnx_withdrawals_api_shape() -> None:
             {
                 "asset": "VCHF",
                 "quantity": 9.55,
-                "blockchain": "CELO",
-                "destination": "celo-hot",
+                "blockchain": "BASE",
+                "destination": "base-hot",
                 "status": "pending",
                 "txid": "abc123",
             },
@@ -66,7 +66,7 @@ def test_parse_vnx_withdrawals_api_shape() -> None:
     parsed = parse_vnx_withdrawals(api, "VCHF")
     assert len(parsed) == 1
     assert parsed[0].quantity == 9.55
-    assert parsed[0].blockchain == "CELO"
+    assert parsed[0].blockchain == "BASE"
 
 
 def test_reconcile_merges_api_pending_withdraw(ledger_path: Path) -> None:
@@ -77,13 +77,13 @@ def test_reconcile_merges_api_pending_withdraw(ledger_path: Path) -> None:
         PendingVnxWithdraw(
             asset="VCHF",
             quantity=9.55,
-            blockchain="CELO",
-            destination="celo-hot",
+            blockchain="BASE",
+            destination="base-hot",
             status="pending",
             txid="api-tx",
         )
     ]
-    active = ledger.reconcile(platform_token=10.0, celo_token=0.0, sol_token=0.0, api_withdrawals=api)
+    active = ledger.reconcile(platform_token=10.0, base_token=0.0, sol_token=0.0, api_withdrawals=api)
     assert len(active) == 1
     assert active[0].extra.get("source") == "vnx_api"
 
@@ -93,11 +93,11 @@ async def test_bridge_skips_duplicate_withdraw_when_pending(ledger_path: Path, m
     ledger = InFlightLedger("VCHF", ledger_path)
     ledger.log_vnx_withdraw(
         9.55,
-        "CELO",
-        "celo-hot",
-        "vnx_to_celo",
+        "BASE",
+        "base-hot",
+        "vnx_to_base",
         txids=["existing"],
-        baseline_celo_token=0.0,
+        baseline_base_token=0.0,
         baseline_sol_token=0.0,
     )
 
@@ -131,11 +131,11 @@ async def test_bridge_skips_duplicate_withdraw_when_pending(ledger_path: Path, m
     monkeypatch.setattr("src.vnx.bridge.is_dry_run", lambda: False)
 
     result = await bridge.bridge_vchf(
-        direction="vnx_to_celo",
+        direction="vnx_to_base",
         quantity=9.55,
-        source_blockchain="CELO",
-        dest_blockchain="CELO",
-        dest_label="celo-hot",
+        source_blockchain="BASE",
+        dest_blockchain="BASE",
+        dest_label="base-hot",
         deposit_tx_builder=lambda _a: None,
         withdraw_only=True,
     )
