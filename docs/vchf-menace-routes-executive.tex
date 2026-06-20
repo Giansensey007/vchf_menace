@@ -1,0 +1,243 @@
+% !TeX program = lualatex
+\documentclass[9pt,a4paper,landscape]{article}
+\usepackage[a4paper,landscape,margin=8mm]{geometry}
+\usepackage{fontspec}
+\usepackage{microtype}
+\defaultfontfeatures{Ligatures=TeX}
+\IfFontExistsTF{Inter}{\usepackage[sfdefault,tabular]{inter}}{
+  \IfFontExistsTF{Helvetica Neue}{\setmainfont{Helvetica Neue}}{
+    \setmainfont{TeX Gyre Heros}
+  }
+}
+\usepackage{xcolor}
+\usepackage{array}
+\usepackage{adjustbox}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,calc,positioning}
+\pagestyle{empty}
+\setlength{\parindent}{0pt}
+\definecolor{ink}{RGB}{25,35,55}
+\definecolor{surface}{RGB}{245,248,252}
+\definecolor{primary}{RGB}{0,82,155}
+\definecolor{celofill}{RGB}{253,236,200}
+\definecolor{celostroke}{RGB}{166,124,0}
+\definecolor{basefill}{RGB}{214,234,248}
+\definecolor{basestroke}{RGB}{0,82,155}
+\definecolor{solfill}{RGB}{234,218,255}
+\definecolor{solstroke}{RGB}{122,43,210}
+\definecolor{ethfill}{RGB}{221,228,250}
+\definecolor{ethstroke}{RGB}{67,85,187}
+\definecolor{vnxfill}{RGB}{224,242,240}
+\definecolor{vnxstroke}{RGB}{0,107,98}
+\definecolor{profit}{RGB}{21,122,78}
+\definecolor{profitbg}{RGB}{220,245,230}
+\definecolor{decision}{RGB}{232,240,250}
+\newcommand{\statlabel}[1]{{\fontsize{6.5}{8}\selectfont\bfseries\textcolor{ink!55}{\MakeUppercase{#1}}}}
+\newcommand{\badge}[2]{\tikz[baseline=(b.base)]{\node[draw=#2!40,fill=#2,rounded corners=1mm,inner xsep=1.8mm,inner ysep=0.6mm](b){{\fontsize{7}{8.5}\selectfont\bfseries #1}};}}
+\def\FxA{0}\def\FxB{17}\def\FxC{33}\def\FxD{49}\def\FxE{65}\def\FxR{81}
+\tikzset{
+  hub/.style={draw=#1,thick,rounded corners=2pt,minimum height=6.5mm,minimum width=12.5mm,align=center,font=\fontsize{6.2}{7.5}\selectfont\bfseries,inner sep=0pt},
+  hub/.default=ink,
+  act/.style={draw=#1!55,fill=white,rounded corners=2pt,minimum height=6.5mm,minimum width=11mm,align=center,font=\fontsize{5.8}{7}\selectfont,inner sep=0pt},
+  act/.default=ink,
+  recon/.style={draw=primary!55,fill=primary!6,dashed,thick,rounded corners=2pt,minimum width=14mm,minimum height=6.5mm,align=center,font=\fontsize{5.5}{6.5}\selectfont\bfseries,text=primary,inner sep=0.5pt},
+  rowlbl/.style={anchor=east,font=\fontsize{6}{7.2}\selectfont\bfseries,text=ink!65,minimum width=16mm,align=right},
+  arr/.style={-{Stealth[length=1.6mm]},thick,draw=ink!50},
+  bridge/.style={-{Stealth[length=2mm]},thick,draw=ink!45},
+}
+\begin{document}
+\color{ink}
+\noindent\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.62\linewidth}@{\hspace{0.02\linewidth}}>{\raggedright\arraybackslash}p{0.35\linewidth}@{}}
+\begin{minipage}[t]{\linewidth}
+  {\fontsize{17}{19}\selectfont\bfseries\color{primary} VCHF Menace}\\[1pt]
+  {\fontsize{9}{11}\selectfont Dual-hub VCHF arbitrage — Celo (USDT) + Base (USDC) · Solana · VNX}\\[1pt]
+  {\fontsize{7}{8.5}\selectfont\textcolor{ink!60}{10 directed routes · 10/10 active · closed-loop return after every arb}}
+\end{minipage}&
+\begin{minipage}[t]{\linewidth}\raggedleft
+  \badge{10 routes active}{profitbg}\hspace{1.5mm}\badge{dual hub}{decision}\\[2pt]
+  {\fontsize{7}{8.5}\selectfont\textcolor{ink!50}{2026-06-20 · github.com/Giansensey007/vchf\_menace}}
+\end{minipage}\\
+\end{tabular}
+\vspace{1mm}\noindent\rule{\linewidth}{0.3pt}\vspace{1mm}
+\noindent\renewcommand{\arraystretch}{1.1}
+\begin{tabular}{@{}>{\centering\arraybackslash}p{0.23\linewidth}>{\centering\arraybackslash}p{0.23\linewidth}>{\centering\arraybackslash}p{0.23\linewidth}>{\centering\arraybackslash}p{0.24\linewidth}@{}}
+\fcolorbox{primary!25}{surface}{\begin{minipage}[c][13mm][c]{0.9\linewidth}\statlabel{Trade size}\\{\fontsize{9.5}{11}\selectfont\bfseries 200\,--\,2000}\\{\fontsize{6.5}{8}\selectfont\textcolor{ink!65}{VCHF per route}}\end{minipage}}&
+\fcolorbox{primary!25}{surface}{\begin{minipage}[c][13mm][c]{0.9\linewidth}\statlabel{Min profit}\\{\fontsize{9.5}{11}\selectfont\bfseries\textcolor{profit}{\$\geq\$5.00}}\\{\fontsize{6.5}{8}\selectfont\textcolor{ink!65}{net round-trip}}\end{minipage}}&
+\fcolorbox{primary!25}{surface}{\begin{minipage}[c][13mm][c]{0.9\linewidth}\statlabel{VNX order min}\\{\fontsize{9.5}{11}\selectfont\bfseries 30}\\{\fontsize{6.5}{8}\selectfont\textcolor{ink!65}{VCHF/USDC platform}}\end{minipage}}&
+\fcolorbox{primary!25}{surface}{\begin{minipage}[c][13mm][c]{0.9\linewidth}\statlabel{Poll cycle}\\{\fontsize{9.5}{11}\selectfont\bfseries 60\,s}\\{\fontsize{6.5}{8}\selectfont\textcolor{ink!65}{between scans}}\end{minipage}}\\
+\end{tabular}
+\vspace{1.5mm}\noindent\rule{\linewidth}{0.3pt}\vspace{1.5mm}
+\noindent\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.62\linewidth}@{\hspace{0.02\linewidth}}>{\raggedright\arraybackslash}p{0.35\linewidth}@{}}
+\begin{minipage}[t]{\linewidth}\vspace{0pt}
+\adjustbox{width=\linewidth,valign=t}{\begin{tikzpicture}[x=1mm,y=-1mm]
+\useasboundingbox (-18,0) rectangle (97,69.0);
+\node[anchor=west,font=\fontsize{8}{9.5}\selectfont\bfseries\color{primary}] at (0,0) {Hub topology};
+\node[hub=celostroke,fill=celofill] (hubC) at (18,3.5) {Celo\\USDT};
+\node[hub=basestroke,fill=basefill] (hubB) at (38,3.5) {Base\\USDC};
+\node[hub=solstroke,fill=solfill] (hubS) at (58,3.5) {Sol\\USDC};
+\node[hub=vnxstroke,fill=vnxfill] (hubV) at (78,3.5) {VNX\\VCHF};
+\draw[bridge] (hubC) -- node[above,font=\fontsize{5}{6}\selectfont]{VNX VCHF} (hubS);
+\draw[bridge] (hubB) -- node[above,font=\fontsize{5}{6}\selectfont]{VNX VCHF} (hubS);
+\draw[bridge] (hubC) -- node[above,font=\fontsize{5}{6}\selectfont]{deposit} (hubV);
+\draw[bridge] (hubB) -- node[above,font=\fontsize{5}{6}\selectfont]{deposit} (hubV);
+\draw[bridge,dashed] (hubC) to[bend left=12] node[below,font=\fontsize{5}{6}\selectfont]{Wormhole USDT} (hubS);
+\draw[bridge,dashed] (hubB) to[bend right=12] node[below,font=\fontsize{5}{6}\selectfont]{Wormhole} (hubS);
+\node[anchor=west,font=\fontsize{5.5}{6.5}\selectfont,text=ink!55] at (0,6.5) {Solid = VCHF bridge · Dashed = stable rebalance (Wormhole / CCTP)};
+\node[anchor=west, font=\fontsize{8}{9.5}\selectfont\bfseries\color{celostroke}] at (0,4.2) {Celo $\leftrightarrow$ Sol};
+\node[rowlbl] at (-2,7.0) {celo$\rightarrow$sol};
+\node[hub=celostroke, fill=celofill, anchor=west] (celotosolanas) at (\FxA,7.0) {Celo\\USDT};
+\node[act=celostroke, anchor=west] (celotosolanab) at (\FxB,7.0) {Buy VCHF};
+\draw[arr] (celotosolanas)--(celotosolanab);
+\node[act=celostroke, anchor=west] (celotosolanac) at (\FxC,7.0) {VNX br.};
+\draw[arr] (celotosolanab)--(celotosolanac);
+\node[act=celostroke, anchor=west] (celotosolanad) at (\FxD,7.0) {Sell VCHF};
+\draw[arr] (celotosolanac)--(celotosolanad);
+\node[hub=solstroke, fill=solfill, anchor=west] (celotosolanae) at (\FxE,7.0) {Sol\\USDC};
+\draw[arr] (celotosolanad)--(celotosolanae);
+\node[recon, anchor=west] (celotosolanar) at (\FxR,7.0) {Wormhole Celo$\leftrightarrow$Sol};
+\draw[arr] (celotosolanae)--(celotosolanar);
+\node[rowlbl] at (-2,12.0) {sol$\rightarrow$celo};
+\node[hub=solstroke, fill=solfill, anchor=west] (solanatocelos) at (\FxA,12.0) {Sol\\USDC};
+\node[act=solstroke, anchor=west] (solanatocelob) at (\FxB,12.0) {Buy VCHF};
+\draw[arr] (solanatocelos)--(solanatocelob);
+\node[act=solstroke, anchor=west] (solanatoceloc) at (\FxC,12.0) {VNX br.};
+\draw[arr] (solanatocelob)--(solanatoceloc);
+\node[act=solstroke, anchor=west] (solanatocelod) at (\FxD,12.0) {Sell VCHF};
+\draw[arr] (solanatoceloc)--(solanatocelod);
+\node[hub=celostroke, fill=celofill, anchor=west] (solanatoceloe) at (\FxE,12.0) {Celo\\USDT};
+\draw[arr] (solanatocelod)--(solanatoceloe);
+\node[recon, anchor=west] (solanatocelor) at (\FxR,12.0) {Wormhole Celo$\leftrightarrow$Sol};
+\draw[arr] (solanatoceloe)--(solanatocelor);
+\node[anchor=west, font=\fontsize{8}{9.5}\selectfont\bfseries\color{basestroke}] at (0,16.7) {Base $\leftrightarrow$ Sol};
+\node[rowlbl] at (-2,19.5) {base$\rightarrow$sol};
+\node[hub=basestroke, fill=basefill, anchor=west] (basetosolanas) at (\FxA,19.5) {Base\\USDC};
+\node[act=basestroke, anchor=west] (basetosolanab) at (\FxB,19.5) {Buy VCHF};
+\draw[arr] (basetosolanas)--(basetosolanab);
+\node[act=basestroke, anchor=west] (basetosolanac) at (\FxC,19.5) {VNX br.};
+\draw[arr] (basetosolanab)--(basetosolanac);
+\node[act=basestroke, anchor=west] (basetosolanad) at (\FxD,19.5) {Sell VCHF};
+\draw[arr] (basetosolanac)--(basetosolanad);
+\node[hub=solstroke, fill=solfill, anchor=west] (basetosolanae) at (\FxE,19.5) {Sol\\USDC};
+\draw[arr] (basetosolanad)--(basetosolanae);
+\node[recon, anchor=west] (basetosolanar) at (\FxR,19.5) {Wormhole Base$\leftrightarrow$Sol};
+\draw[arr] (basetosolanae)--(basetosolanar);
+\node[rowlbl] at (-2,24.5) {sol$\rightarrow$base};
+\node[hub=solstroke, fill=solfill, anchor=west] (solanatobases) at (\FxA,24.5) {Sol\\USDC};
+\node[act=solstroke, anchor=west] (solanatobaseb) at (\FxB,24.5) {Buy VCHF};
+\draw[arr] (solanatobases)--(solanatobaseb);
+\node[act=solstroke, anchor=west] (solanatobasec) at (\FxC,24.5) {VNX br.};
+\draw[arr] (solanatobaseb)--(solanatobasec);
+\node[act=solstroke, anchor=west] (solanatobased) at (\FxD,24.5) {Sell VCHF};
+\draw[arr] (solanatobasec)--(solanatobased);
+\node[hub=basestroke, fill=basefill, anchor=west] (solanatobasee) at (\FxE,24.5) {Base\\USDC};
+\draw[arr] (solanatobased)--(solanatobasee);
+\node[recon, anchor=west] (solanatobaser) at (\FxR,24.5) {Wormhole Base$\leftrightarrow$Sol};
+\draw[arr] (solanatobasee)--(solanatobaser);
+\node[anchor=west, font=\fontsize{8}{9.5}\selectfont\bfseries\color{celostroke}] at (0,29.2) {Celo $\leftrightarrow$ VNX};
+\node[rowlbl] at (-2,32.0) {celo$\rightarrow$vnx};
+\node[hub=celostroke, fill=celofill, anchor=west] (celotovnxs) at (\FxA,32.0) {Celo\\USDT};
+\node[act=celostroke, anchor=west] (celotovnxb) at (\FxB,32.0) {Buy VCHF};
+\draw[arr] (celotovnxs)--(celotovnxb);
+\node[act=celostroke, anchor=west] (celotovnxc) at (\FxC,32.0) {VNX dep.};
+\draw[arr] (celotovnxb)--(celotovnxc);
+\node[act=celostroke, anchor=west] (celotovnxd) at (\FxD,32.0) {VNX sell};
+\draw[arr] (celotovnxc)--(celotovnxd);
+\node[hub=vnxstroke, fill=vnxfill, anchor=west] (celotovnxe) at (\FxE,32.0) {VNX\\USDC};
+\draw[arr] (celotovnxd)--(celotovnxe);
+\node[recon, anchor=west] (celotovnxr) at (\FxR,32.0) {VNX platform};
+\draw[arr] (celotovnxe)--(celotovnxr);
+\node[rowlbl] at (-2,37.0) {vnx$\rightarrow$celo};
+\node[hub=vnxstroke, fill=vnxfill, anchor=west] (vnxtocelos) at (\FxA,37.0) {VNX\\USDC};
+\node[act=vnxstroke, anchor=west] (vnxtocelob) at (\FxB,37.0) {VNX buy};
+\draw[arr] (vnxtocelos)--(vnxtocelob);
+\node[act=vnxstroke, anchor=west] (vnxtoceloc) at (\FxC,37.0) {Withdraw};
+\draw[arr] (vnxtocelob)--(vnxtoceloc);
+\node[act=vnxstroke, anchor=west] (vnxtocelod) at (\FxD,37.0) {Sell VCHF};
+\draw[arr] (vnxtoceloc)--(vnxtocelod);
+\node[hub=celostroke, fill=celofill, anchor=west] (vnxtoceloe) at (\FxE,37.0) {Celo\\USDT};
+\draw[arr] (vnxtocelod)--(vnxtoceloe);
+\node[recon, anchor=west] (vnxtocelor) at (\FxR,37.0) {VNX platform};
+\draw[arr] (vnxtoceloe)--(vnxtocelor);
+\node[anchor=west, font=\fontsize{8}{9.5}\selectfont\bfseries\color{basestroke}] at (0,41.7) {Base $\leftrightarrow$ VNX};
+\node[rowlbl] at (-2,44.5) {base$\rightarrow$vnx};
+\node[hub=basestroke, fill=basefill, anchor=west] (basetovnxs) at (\FxA,44.5) {Base\\USDC};
+\node[act=basestroke, anchor=west] (basetovnxb) at (\FxB,44.5) {Buy VCHF};
+\draw[arr] (basetovnxs)--(basetovnxb);
+\node[act=basestroke, anchor=west] (basetovnxc) at (\FxC,44.5) {VNX dep.};
+\draw[arr] (basetovnxb)--(basetovnxc);
+\node[act=basestroke, anchor=west] (basetovnxd) at (\FxD,44.5) {VNX sell};
+\draw[arr] (basetovnxc)--(basetovnxd);
+\node[hub=vnxstroke, fill=vnxfill, anchor=west] (basetovnxe) at (\FxE,44.5) {VNX\\USDC};
+\draw[arr] (basetovnxd)--(basetovnxe);
+\node[recon, anchor=west] (basetovnxr) at (\FxR,44.5) {VNX platform};
+\draw[arr] (basetovnxe)--(basetovnxr);
+\node[rowlbl] at (-2,49.5) {vnx$\rightarrow$base};
+\node[hub=vnxstroke, fill=vnxfill, anchor=west] (vnxtobases) at (\FxA,49.5) {VNX\\USDC};
+\node[act=vnxstroke, anchor=west] (vnxtobaseb) at (\FxB,49.5) {VNX buy};
+\draw[arr] (vnxtobases)--(vnxtobaseb);
+\node[act=vnxstroke, anchor=west] (vnxtobasec) at (\FxC,49.5) {Withdraw};
+\draw[arr] (vnxtobaseb)--(vnxtobasec);
+\node[act=vnxstroke, anchor=west] (vnxtobased) at (\FxD,49.5) {Sell VCHF};
+\draw[arr] (vnxtobasec)--(vnxtobased);
+\node[hub=basestroke, fill=basefill, anchor=west] (vnxtobasee) at (\FxE,49.5) {Base\\USDC};
+\draw[arr] (vnxtobased)--(vnxtobasee);
+\node[recon, anchor=west] (vnxtobaser) at (\FxR,49.5) {VNX platform};
+\draw[arr] (vnxtobasee)--(vnxtobaser);
+\node[anchor=west, font=\fontsize{8}{9.5}\selectfont\bfseries\color{solstroke}] at (0,54.2) {Sol $\leftrightarrow$ VNX};
+\node[rowlbl] at (-2,57.0) {sol$\rightarrow$vnx};
+\node[hub=solstroke, fill=solfill, anchor=west] (solanatovnxs) at (\FxA,57.0) {Sol\\USDC};
+\node[act=solstroke, anchor=west] (solanatovnxb) at (\FxB,57.0) {Buy VCHF};
+\draw[arr] (solanatovnxs)--(solanatovnxb);
+\node[act=solstroke, anchor=west] (solanatovnxc) at (\FxC,57.0) {VNX dep.};
+\draw[arr] (solanatovnxb)--(solanatovnxc);
+\node[act=solstroke, anchor=west] (solanatovnxd) at (\FxD,57.0) {VNX sell};
+\draw[arr] (solanatovnxc)--(solanatovnxd);
+\node[hub=vnxstroke, fill=vnxfill, anchor=west] (solanatovnxe) at (\FxE,57.0) {VNX\\USDC};
+\draw[arr] (solanatovnxd)--(solanatovnxe);
+\node[recon, anchor=west] (solanatovnxr) at (\FxR,57.0) {VNX + deposit};
+\draw[arr] (solanatovnxe)--(solanatovnxr);
+\node[rowlbl] at (-2,62.0) {vnx$\rightarrow$sol};
+\node[hub=vnxstroke, fill=vnxfill, anchor=west] (vnxtosolanas) at (\FxA,62.0) {VNX\\USDC};
+\node[act=vnxstroke, anchor=west] (vnxtosolanab) at (\FxB,62.0) {VNX buy};
+\draw[arr] (vnxtosolanas)--(vnxtosolanab);
+\node[act=vnxstroke, anchor=west] (vnxtosolanac) at (\FxC,62.0) {Withdraw};
+\draw[arr] (vnxtosolanab)--(vnxtosolanac);
+\node[act=vnxstroke, anchor=west] (vnxtosolanad) at (\FxD,62.0) {Sell VCHF};
+\draw[arr] (vnxtosolanac)--(vnxtosolanad);
+\node[hub=solstroke, fill=solfill, anchor=west] (vnxtosolanae) at (\FxE,62.0) {Sol\\USDC};
+\draw[arr] (vnxtosolanad)--(vnxtosolanae);
+\node[recon, anchor=west] (vnxtosolanar) at (\FxR,62.0) {CCTP Sol$\rightarrow$ETH$\rightarrow$VNX};
+\draw[arr] (vnxtosolanae)--(vnxtosolanar);
+\node[anchor=west,font=\fontsize{5.5}{6.5}\selectfont,text=ink!55,text width=95mm] at (0,67.5) {Each row = one scanner direction. Greyed rows = disabled via config. Token: VCHF on all legs.};
+\end{tikzpicture}}
+\end{minipage}&
+\begin{minipage}[t]{\linewidth}\vspace{0pt}
+\noindent\fcolorbox{primary}{decision}{\begin{minipage}[t][38mm][t]{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}
+\centering{\fontsize{8}{9.5}\selectfont\bfseries\color{primary} Dual EVM hubs}\\[3pt]
+{\fontsize{6.2}{7.5}\selectfont\raggedright
+\textbf{Celo} spends USDT, Ubeswap VCHF/USDT.\\[1pt]
+\textbf{Base} spends USDC, Kyber/Uniswap VCHF/USDC.\\[1pt]
+\textbf{Solana} spends USDC via Jupiter.\\[1pt]
+\textbf{VNX} platform buy/sell VCHF (min 30).\\[3pt]
+\centering\renewcommand{\arraystretch}{1.1}
+\begin{tabular}{@{}l@{\hspace{2mm}}l@{}}
+\textbf{Bridge} & \textbf{Used for} \\
+VNX VCHF & cross-chain VCHF \\
+Wormhole & Celo/Base $\leftrightarrow$ Sol stables \\
+CCTP & Sol USDC $\rightarrow$ ETH $\rightarrow$ VNX \\
+\end{tabular}}
+\end{minipage}}\\[2mm]
+\noindent\fcolorbox{ink!18}{surface}{\begin{minipage}[t][14mm][t]{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}
+{\fontsize{7}{8.5}\selectfont\bfseries Closed-loop return}\\[1pt]
+{\fontsize{6}{7.2}\selectfont After every arb the return leg runs. Platform origin after \texttt{vnx\_to\_solana} uses \texttt{cctp\_sol\_usdc\_to\_vnx} instead of inverse.}
+\end{minipage}}\\[2mm]
+\noindent\fcolorbox{ink!18}{surface}{\begin{minipage}[t][12mm][t]{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}
+{\fontsize{7}{8.5}\selectfont\bfseries Config flags}\\[1pt]
+{\fontsize{6}{7.2}\selectfont \texttt{enable\_vnx\_arb\_routes}=true · \texttt{enable\_vnx\_cctp\_routes}=true}
+\end{minipage}}
+\end{minipage}\\
+\end{tabular}
+\vspace{1mm}\noindent\rule{\linewidth}{0.3pt}
+\vspace{0.5mm}
+\noindent{\fontsize{6.5}{8}\selectfont\textbf{Deploy:} \texttt{python -m src.main} \quad|\quad \textbf{Regenerate:} \texttt{python scripts/generate\_routes\_pdf.py --executive}}
+\end{document}

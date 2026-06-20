@@ -348,12 +348,12 @@ def _exec_rebalance(direction: str) -> str:
         return ""
     if route.route_group in ("celo_sol", "base_sol"):
         hub = "Celo" if route.route_group == "celo_sol" else "Base"
-        return rf"Wormhole\\{hub}$\leftrightarrow$Sol"
+        return rf"Wormhole {hub}$\leftrightarrow$Sol"
     if route.route_group == "vnx_sol":
         if direction == "vnx_to_solana":
-            return r"CCTP\\Sol$\rightarrow$ETH$\rightarrow$VNX"
-        return r"VNX bridge\\+ deposit"
-    return r"VNX\\platform"
+            return r"CCTP Sol$\rightarrow$ETH$\rightarrow$VNX"
+        return r"VNX + deposit"
+    return r"VNX platform"
 
 
 def _exec_flow_cells(direction: str) -> tuple[str, list[str], str, str]:
@@ -363,18 +363,17 @@ def _exec_flow_cells(direction: str) -> tuple[str, list[str], str, str]:
         return "", [], "", ""
     end = LEG_END_STABLE.get(direction, ("?", "?"))
     buy_style = _HUB_STYLE.get(route.buy_chain, ("ink", "surface", route.buy_chain))
-    sell_style = _HUB_STYLE.get(route.sell_chain, ("ink", "surface", route.sell_chain))
     buy_stable = _STABLE_LABEL.get((route.buy_chain, "usdt" if route.buy_chain == "celo" else "usdc"), "?")
     end_stable = _STABLE_LABEL.get((end[0], end[1]), end[1].upper())
 
     start = rf"{buy_style[2]}\\{buy_stable}"
 
     if route.buy_chain == "vnx":
-        steps = ["VNX\\buy", "Withdraw\\VCHF", "Sell\\VCHF"]
+        steps = [r"VNX buy", r"Withdraw", r"Sell VCHF"]
     elif route.sell_chain == "vnx":
-        steps = ["Buy\\VCHF", "VNX\\deposit", "VNX\\sell"]
+        steps = [r"Buy VCHF", r"VNX dep.", r"VNX sell"]
     else:
-        steps = ["Buy\\VCHF", "VNX\\bridge", "Sell\\VCHF"]
+        steps = [r"Buy VCHF", r"VNX br.", r"Sell VCHF"]
 
     end_hub = _HUB_STYLE.get(end[0], ("ink", "surface", end[0]))
     finish = rf"{end_hub[2]}\\{end_stable}"
@@ -399,6 +398,8 @@ def _exec_route_row(y: float, direction: str, *, active: bool) -> list[str]:
     )
     cols = ["B", "C", "D"]
     prev = f"{prefix}s"
+    end_chain = LEG_END_STABLE[direction][0]
+    end_stroke, end_fill, _ = _HUB_STYLE.get(end_chain, ("ink", "surface", end_chain))
     for i, step in enumerate(steps):
         col = cols[i]
         nid = f"{prefix}{col.lower()}"
@@ -408,9 +409,7 @@ def _exec_route_row(y: float, direction: str, *, active: bool) -> list[str]:
         nodes.append(rf"\draw[arr{dim}] ({prev})--({nid});")
         prev = nid
     nodes.append(
-        rf"\node[hub={_HUB_STYLE.get(route.sell_chain if route.sell_chain != 'vnx' else LEG_END_STABLE[direction][0], ('ink','surface','?'))[0]}, "
-        rf"fill={_HUB_STYLE.get(LEG_END_STABLE[direction][0], ('ink','surface','?'))[1]}{dim}, "
-        rf"anchor=west] ({prefix}e) at (\FxE,{y}) {{{finish}}};"
+        rf"\node[hub={end_stroke}, fill={end_fill}{dim}, anchor=west] ({prefix}e) at (\FxE,{y}) {{{finish}}};"
     )
     nodes.append(rf"\draw[arr{dim}] ({prev})--({prefix}e);")
     nodes.append(
@@ -437,8 +436,8 @@ def _build_executive_latex() -> str:
     )
 
     y = 7.0
-    row_step = 5.2
-    group_gap = 2.8
+    row_step = 5.0
+    group_gap = 2.5
     flow_lines: list[str] = []
     for gi, (group_title, group_color, directions) in enumerate(_EXEC_GROUPS):
         if gi:
@@ -518,10 +517,10 @@ def _build_executive_latex() -> str:
             r"\vspace{1mm}\noindent\rule{\linewidth}{0.3pt}\vspace{1mm}",
             r"\noindent\renewcommand{\arraystretch}{1.1}",
             r"\begin{tabular}{@{}>{\centering\arraybackslash}p{0.23\linewidth}>{\centering\arraybackslash}p{0.23\linewidth}>{\centering\arraybackslash}p{0.23\linewidth}>{\centering\arraybackslash}p{0.24\linewidth}@{}}",
-            rf"\fcolorbox{{primary!25}}{{surface}}{{\begin{{minipage}}[c][13mm][c]{{0.9\linewidth}}\statlabel{{Trade size}}\\{{\fontsize{{9.5}}{{11}}\selectfont\bfseries {cfg.min_trade_vchf:.0f}\,--\,{cfg.max_trade_vchf:.0f}}}\\{{\fontsize{{6.5}}{{8}}\selectfont\textcolor{{ink!65}}{{VCHF per route}}}}\end{{minipage}}}}&",
-            rf"\fcolorbox{{primary!25}}{{surface}}{{\begin{{minipage}}[c][13mm][c]{{0.9\linewidth}}\statlabel{{Min profit}}\\{{\fontsize{{9.5}}{{11}}\selectfont\bfseries\textcolor{{profit}}{{$\geq$\${cfg.min_profit_usd:.2f}}}}}\\{{\fontsize{{6.5}}{{8}}\selectfont\textcolor{{ink!65}}{{net round-trip}}}}\end{{minipage}}}}&",
+            rf"\fcolorbox{{primary!25}}{{surface}}{{\begin{{minipage}}[c][13mm][c]{{0.9\linewidth}}\statlabel{{Trade size}}\\{{\fontsize{{9.5}}{{11}}\selectfont\bfseries {trade_range}}}\\{{\fontsize{{6.5}}{{8}}\selectfont\textcolor{{ink!65}}{{VCHF per route}}}}\end{{minipage}}}}&",
+            rf"\fcolorbox{{primary!25}}{{surface}}{{\begin{{minipage}}[c][13mm][c]{{0.9\linewidth}}\statlabel{{Min profit}}\\{{\fontsize{{9.5}}{{11}}\selectfont\bfseries\textcolor{{profit}}{{{min_profit}}}}}\\{{\fontsize{{6.5}}{{8}}\selectfont\textcolor{{ink!65}}{{net round-trip}}}}\end{{minipage}}}}&",
             rf"\fcolorbox{{primary!25}}{{surface}}{{\begin{{minipage}}[c][13mm][c]{{0.9\linewidth}}\statlabel{{VNX order min}}\\{{\fontsize{{9.5}}{{11}}\selectfont\bfseries {VNX_MIN_VCHF:.0f}}}\\{{\fontsize{{6.5}}{{8}}\selectfont\textcolor{{ink!65}}{{VCHF/USDC platform}}}}\end{{minipage}}}}&",
-            rf"\fcolorbox{{primary!25}}{{surface}}{{\begin{{minipage}}[c][13mm][c]{{0.9\linewidth}}\statlabel{{Poll cycle}}\\{{\fontsize{{9.5}}{{11}}\selectfont\bfseries {cfg.poll_interval_sec:.0f}\,s}}\\{{\fontsize{{6.5}}{{8}}\selectfont\textcolor{{ink!65}}{{between scans}}}}\end{{minipage}}}}\\",
+            rf"\fcolorbox{{primary!25}}{{surface}}{{\begin{{minipage}}[c][13mm][c]{{0.9\linewidth}}\statlabel{{Poll cycle}}\\{{\fontsize{{9.5}}{{11}}\selectfont\bfseries {poll_sec}}}\\{{\fontsize{{6.5}}{{8}}\selectfont\textcolor{{ink!65}}{{between scans}}}}\end{{minipage}}}}\\",
             r"\end{tabular}",
             r"\vspace{1.5mm}\noindent\rule{\linewidth}{0.3pt}\vspace{1.5mm}",
             r"\noindent\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.62\linewidth}@{\hspace{0.02\linewidth}}>{\raggedright\arraybackslash}p{0.35\linewidth}@{}}",
@@ -566,7 +565,7 @@ def _build_executive_latex() -> str:
             r"\end{minipage}}\\[2mm]",
             r"\noindent\fcolorbox{ink!18}{surface}{\begin{minipage}[t][12mm][t]{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}",
             r"{\fontsize{7}{8.5}\selectfont\bfseries Config flags}\\[1pt]",
-            rf"{{\fontsize{{6}}{{7.2}}\selectfont \texttt{{enable\_vnx\_arb\_routes}}={str(cfg.enable_vnx_arb_routes).lower()} · \texttt{{enable\_vnx\_cctp\_routes}}={str(cfg.enable_vnx_cctp_routes).lower()}}}",
+            rf"{{\fontsize{{6}}{{7.2}}\selectfont {cfg_flags}}}",
             r"\end{minipage}}",
             r"\end{minipage}\\",
             r"\end{tabular}",
@@ -587,6 +586,11 @@ def _compile_tex(tex_path: Path, *, engine: str) -> subprocess.CompletedProcess[
             capture_output=True,
             text=True,
         )
+    log_path = DOCS / f"{tex_path.stem}.log"
+    if proc.returncode != 0 and log_path.exists():
+        log = log_path.read_text(encoding="utf-8", errors="replace")
+        if "Output written on" in log and (DOCS / f"{tex_path.stem}.pdf").exists():
+            proc = subprocess.CompletedProcess(args=proc.args, returncode=0, stdout=proc.stdout, stderr=proc.stderr)
     return proc
 
 
