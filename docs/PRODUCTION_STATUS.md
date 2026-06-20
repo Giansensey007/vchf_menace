@@ -80,6 +80,27 @@ Runner: `python scripts/run_production_sanity_10.py` · Results: `validation/pro
 **Final state (iter 10):** **192 passed** · audit OK · verify-all critical PASS · on-chain probes SKIP (funding).  
 Fixes this pass: `format_audit_block` on in-flight ledger, dual-hub `reconcile(base_token=…)`, audit skips Base when `BASE_PRIVATE_KEY` unset, route-sim quote retry on VNX 400.
 
+### 10-iteration validation — round 5 (2026-06-20)
+
+Command pattern per iteration: `pytest tests/ -q` → `execute_route_matrix.py --step audit` → (`verify-all` on even iters).
+
+| Iter | pytest | audit | verify-all |
+|------|--------|-------|------------|
+| 1 | PASS (200) | PASS | — |
+| 2 | PASS (200) | PASS | PASS |
+| 3 | PASS (200) | PASS | — |
+| 4 | PASS (200) | PASS | PASS |
+| 5 | PASS (200) | PASS | — |
+| 6 | PASS (200) | PASS | PASS |
+| 7 | PASS (200) | PASS | — |
+| 8 | PASS (200) | PASS | PASS |
+| 9 | PASS (200) | PASS | — |
+| 10 | PASS (200) | PASS | PASS |
+
+**Result:** 10/10 PASS · critical `verify-all` checks PASS on all 5 verify runs. On-chain probes SKIP (under-funded). Round 5: platform-only PDF realign (no on-chain stable→VCHF buy), wormhole preflight SKIP when Base USDC &lt; 1, `platform_vchf_only` route-sim skip for blocked buys, `test_platform_policy.py`.
+
+Results: `docs/sanity_10iter_round5.tsv`
+
 ### 10-iteration validation — round 4 (2026-06-20)
 
 Command pattern per iteration: `pytest tests/ -q` → `execute_route_matrix.py --step audit` → (`verify-all` on even iters).

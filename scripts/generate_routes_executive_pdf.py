@@ -21,55 +21,48 @@ N_ROUTES = 10
 VNX_MIN = 30.0
 
 ROUTE_FLOWS: dict[str, list[tuple[str, list[tuple[str, str, str, str | None]]]]] = {
-    "celo_to_solana": [("celo→sol", [
-        ("hub_celo", "Celo", "USDT", None), ("act", "Buy", TOKEN, "CeloSwap"),
-        ("hub_vnx", "VNX", "bridge", "VNX"), ("act", "Sell", TOKEN, "Jupiter"),
-        ("hub_sol", "Sol", "USDC", None), ("recon", "Wormhole", "USDT", "WH"),
+    "celo_to_solana": [("celo→sol (off)", [
+        ("hub_celo", "Celo", "USDT", None), ("act", "off", "no buy", None),
+        ("hub_vnx", "WH", "USDT", "WH"), ("hub_sol", "Sol", "USDC", None),
     ])],
-    "solana_to_celo": [("sol→celo", [
-        ("hub_sol", "Sol", "USDC", None), ("act", "Buy", TOKEN, "Jupiter"),
-        ("hub_vnx", "VNX", "bridge", "VNX"), ("act", "Sell", TOKEN, "CeloSwap"),
-        ("hub_celo", "Celo", "USDT", None), ("recon", "Wormhole", "USDT", "WH"),
+    "solana_to_celo": [("sol→celo (off)", [
+        ("hub_sol", "Sol", "USDC", None), ("act", "off", "no buy", None),
+        ("hub_vnx", "WH", "USDT", "WH"), ("hub_celo", "Celo", "USDT", None),
     ])],
-    "base_to_solana": [("base→sol", [
-        ("hub_base", "Base", "USDC", None), ("act", "Buy", TOKEN, "Kyber"),
-        ("hub_vnx", "VNX", "bridge", "VNX"), ("act", "Sell", TOKEN, "Jupiter"),
-        ("hub_sol", "Sol", "USDC", None), ("recon", "Wormhole", "USDC", "WH"),
+    "base_to_solana": [("base→sol (off)", [
+        ("hub_base", "Base", "USDC", None), ("act", "off", "no buy", None),
+        ("hub_vnx", "WH", "USDC", "WH"), ("hub_sol", "Sol", "USDC", None),
     ])],
-    "solana_to_base": [("sol→base", [
-        ("hub_sol", "Sol", "USDC", None), ("act", "Buy", TOKEN, "Jupiter"),
-        ("hub_vnx", "VNX", "bridge", "VNX"), ("act", "Sell", TOKEN, "Kyber"),
-        ("hub_base", "Base", "USDC", None), ("recon", "Wormhole", "USDC", "WH"),
+    "solana_to_base": [("sol→base (off)", [
+        ("hub_sol", "Sol", "USDC", None), ("act", "off", "no buy", None),
+        ("hub_vnx", "WH", "USDC", "WH"), ("hub_base", "Base", "USDC", None),
     ])],
-    "celo_to_vnx": [("celo→vnx", [
-        ("hub_celo", "Celo", "USDT", None), ("act", "Buy", TOKEN, "CeloSwap"),
-        ("hub_vnx", "VNX", "deposit", "VNX"), ("act", "Sell", TOKEN, "Platform"),
-        ("hub_vnx", "VNX", "USDC", None), ("recon", "Hub ETH", "WH+swap", "WH"),
+    "celo_to_vnx": [("celo→vnx (off)", [
+        ("hub_celo", "Celo", "USDT", None), ("act", "off", "no buy", None),
+        ("hub_eth", "ETH", "USDC", "WH+swap"), ("hub_vnx", "VNX", "USDC", "VNX"),
     ])],
     "vnx_to_celo": [("vnx→celo", [
         ("hub_vnx", "VNX", "USDC", None), ("act", "Buy", TOKEN, "Platform"),
         ("hub_vnx", "VNX", "withdraw", "VNX"), ("act", "Sell", TOKEN, "CeloSwap"),
         ("hub_celo", "Celo", "USDT", None),
     ])],
-    "base_to_vnx": [("base→vnx", [
-        ("hub_base", "Base", "USDC", None), ("act", "Buy", TOKEN, "Kyber"),
-        ("hub_vnx", "VNX", "deposit", "VNX"), ("act", "Sell", TOKEN, "Platform"),
-        ("hub_vnx", "VNX", "USDC", None), ("recon", "Hub ETH", "WH+swap", "WH"),
+    "base_to_vnx": [("base→vnx (off)", [
+        ("hub_base", "Base", "USDC", None), ("act", "off", "no buy", None),
+        ("hub_eth", "ETH", "USDC", "WH+swap"), ("hub_vnx", "VNX", "USDC", "VNX"),
     ])],
     "vnx_to_base": [("vnx→base", [
         ("hub_vnx", "VNX", "USDC", None), ("act", "Buy", TOKEN, "Platform"),
         ("hub_vnx", "VNX", "withdraw", "VNX"), ("act", "Sell", TOKEN, "Kyber"),
         ("hub_base", "Base", "USDC", None),
     ])],
-    "solana_to_vnx": [("sol→vnx", [
-        ("hub_sol", "Sol", "USDC", None), ("act", "Buy", TOKEN, "Jupiter"),
-        ("hub_vnx", "VNX", "deposit", "VNX"), ("act", "Sell", TOKEN, "Platform"),
-        ("hub_vnx", "VNX", "USDC", None), ("recon", "CCTP", "Sol→ETH", "CCTP"),
+    "solana_to_vnx": [("sol→vnx (off)", [
+        ("hub_sol", "Sol", "USDC", None), ("act", "off", "no buy", None),
+        ("hub_eth", "ETH", "USDC", "CCTP"), ("hub_vnx", "VNX", "USDC", "VNX"),
     ])],
     "vnx_to_solana": [("vnx→sol", [
-        ("hub_eth", "ETH", "USDC", None), ("act", "Buy", TOKEN, "Platform"),
+        ("hub_vnx", "VNX", "USDC", None), ("act", "Buy", TOKEN, "Platform"),
         ("hub_vnx", "VNX", "withdraw", "VNX"), ("act", "Sell", TOKEN, "Jupiter"),
-        ("hub_sol", "Sol", "USDC", None), ("recon", "CCTP", "ETH→Sol", "CCTP"),
+        ("hub_sol", "Sol", "USDC", None), ("recon", "CCTP", "return", "CCTP"),
     ])],
 }
 
@@ -132,7 +125,7 @@ def build_latex() -> str:
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     lines = [STYLES, r"\begin{document}", r"\color{ink}",
         rf"{{\fontsize{{15}}{{17}}\selectfont\bfseries\color{{primary}} {BOT}}}\\[1pt]",
-        rf"{{\fontsize{{8.5}}{{10.5}}\selectfont {N_ROUTES} directed {TOKEN} routes · dual EVM hub (Celo USDT + Base USDC)}}\\[1pt]",
+        rf"{{\fontsize{{8.5}}{{10.5}}\selectfont {len(active)}/{N_ROUTES} active · platform withdraw$\rightarrow$chain sell · dual hub}}\\[1pt]",
         rf"{{\fontsize{{6.5}}{{8}}\selectfont\textcolor{{ink!55}}{{{now} · github.com/Giansensey007/{GITHUB}}}}}",
         r"\vspace{1.5mm}\noindent\rule{\linewidth}{0.3pt}\vspace{1.5mm}",
         r"\noindent\begin{tikzpicture}[x=1mm,y=-1mm]",
