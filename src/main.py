@@ -28,12 +28,14 @@ logger = logging.getLogger("vchf_menace")
 
 async def run_once() -> None:
     bot_cfg = load_bot_config()
-    scanner = ArbScanner(bot_cfg)
-    opp = await scanner.best_opportunity()
-
     chains = load_chains()
     token = load_tokens()["VCHF"]
     treasury = TreasuryManager(chains, token, bot_cfg)
+    snap = await treasury.snapshot()
+    logger.info(treasury.balance_line(snap))
+
+    scanner = ArbScanner(bot_cfg)
+    opp = await scanner.best_opportunity()
 
     if not opp:
         logger.info("No profitable opportunity (min $%.2f)", bot_cfg.min_profit_usd)
@@ -55,10 +57,10 @@ async def run_once() -> None:
         opp.route_group,
         is_dry_run(),
     )
-    if opp.base_sol_net is not None or opp.vnx_sol_net is not None:
+    if opp.celo_sol_net is not None or opp.vnx_sol_net is not None:
         logger.info(
-            "Parallel scan: base↔sol=$%s vnx↔sol=$%s | %s",
-            f"{opp.base_sol_net:.2f}" if opp.base_sol_net is not None else "n/a",
+            "Parallel scan: celo↔sol=$%s vnx↔sol=$%s | %s",
+            f"{opp.celo_sol_net:.2f}" if opp.celo_sol_net is not None else "n/a",
             f"{opp.vnx_sol_net:.2f}" if opp.vnx_sol_net is not None else "n/a",
             opp.selection_reason,
         )

@@ -21,7 +21,7 @@ load_dotenv(ROOT / ".env")
 
 from src.bridge.hub_eth import fund_all_chain_gas
 from src.config_loader import load_chains
-from src.execution.base import BaseExecutor
+from src.execution.celo import CeloExecutor
 from src.execution.ethereum import EthereumExecutor
 from src.execution.solana import SolanaExecutor
 from src.quotes.http_client import build_client
@@ -36,7 +36,7 @@ def _log(msg: str) -> None:
 async def _audit() -> None:
     chains = load_chains()
     eth = EthereumExecutor(chains["ethereum"])
-    celo = BaseExecutor(chains["celo"])
+    celo = CeloExecutor(chains["celo"])
     sol = SolanaExecutor(chains["solana"])
     async with VnxClient() as vnx:
         plat = await vnx.account_balance()

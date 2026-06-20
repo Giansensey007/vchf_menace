@@ -20,7 +20,7 @@ _DEFAULT_SYNC_MS: dict[str, float] = {
     "jupiter": _jupiter_default_ms(),
     "vnx": 1200.0,
     "cctp": 1000.0,
-    "base_rpc": 400.0,
+    "celo_rpc": 400.0,
     "solana_rpc": 250.0,
     "eth_rpc": 250.0,
     "blockscout": 1000.0,
@@ -49,7 +49,7 @@ def provider_from_url(url: str) -> str:
     if "circle.com" in host or "iris-api" in host:
         return "cctp"
     if "celo" in host or "forno" in host:
-        return "base_rpc"
+        return "celo_rpc"
     if "solana" in host or host.endswith(".solana.com"):
         return "solana_rpc"
     if "llamarpc" in host or "publicnode.com" in host or "ankr.com" in host or "1rpc.io" in host:

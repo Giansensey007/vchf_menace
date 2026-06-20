@@ -5,7 +5,7 @@ import os
 from dataclasses import dataclass, field
 
 from src.config_loader import BotConfig, ChainConfig, TokenConfig, is_dry_run, token_decimals
-from src.execution.base import BaseExecutor
+from src.execution.celo import CeloExecutor
 from src.execution.executor import ArbExecutor, CycleRecord, CycleState
 from src.execution.solana import SolanaExecutor
 from src.quotes.types import from_human, to_human
@@ -37,8 +37,9 @@ logger = logging.getLogger(__name__)
 class TreasurySnapshot:
     platform_vchf: float = 0.0
     platform_usdc: float = 0.0
-    base_vchf: float = 0.0
-    base_usdc: float = 0.0
+    platform_chf: float = 0.0
+    celo_vchf: float = 0.0
+    celo_usdt: float = 0.0
     sol_vchf: float = 0.0
     sol_usdc: float = 0.0
     pending_vnx_withdraws: list[PendingVnxWithdraw] = field(default_factory=list)
@@ -69,7 +70,7 @@ class ClosedLoopResult:
 class TreasuryManager:
     """
     Platform-centric VCHF treasury: idle VCHF lives on VNX only.
-    Chains hold hub stables (Base USDT, Sol USDC) for buy legs.
+    Chains hold hub stables (Celo USDT, Sol USDC) for buy legs.
     """
 
     def __init__(
@@ -101,18 +102,18 @@ class TreasuryManager:
             return True, "policy off"
         snap = await self.snapshot()
         over = []
-        pending_base = self._ledger.total_pending_to_blockchain("BASE")
+        pending_celo = self._ledger.total_pending_to_blockchain("CELO")
         pending_sol = self._ledger.total_pending_to_blockchain("SOL")
-        base_adj = max(0.0, snap.base_vchf - pending_base)
+        celo_adj = max(0.0, snap.celo_vchf - pending_celo)
         sol_adj = max(0.0, snap.sol_vchf - pending_sol)
-        if base_adj > self.dust:
-            over.append(f"base={snap.base_vchf:.2f}")
+        if celo_adj > self.dust:
+            over.append(f"celo={snap.celo_vchf:.2f}")
         if sol_adj > self.dust:
             over.append(f"sol={snap.sol_vchf:.2f}")
         if over:
             pending_note = ""
-            if pending_base or pending_sol:
-                pending_note = f" (pending withdraw base={pending_base:.2f} sol={pending_sol:.2f})"
+            if pending_celo or pending_sol:
+                pending_note = f" (pending withdraw celo={pending_celo:.2f} sol={pending_sol:.2f})"
             return False, f"on-chain VCHF above dust ({self.dust}): {', '.join(over)}{pending_note}"
         return True, "ok"
 
@@ -123,6 +124,7 @@ class TreasuryManager:
             bal = await vnx.account_balance()
             snap.platform_vchf = vnx.vchf_balance(bal)
             snap.platform_usdc = vnx.usdc_balance(bal)
+            snap.platform_chf = vnx.chf_balance(bal)
             wd_resp = await vnx.query_withdrawals()
             if wd_resp:
                 api_withdrawals.extend(parse_vnx_withdrawals(wd_resp, "VCHF"))
@@ -130,11 +132,11 @@ class TreasuryManager:
             if tr_resp:
                 api_withdrawals.extend(parse_vnx_withdrawals(tr_resp, "VCHF"))
 
-        base = BaseExecutor(self.chains["base"])
-        dec = token_decimals(self.token, "base")
-        snap.base_vchf = float(to_human(base.balance_erc20(self.token.chains["base"]), dec))
-        snap.base_usdc = float(
-            to_human(base.balance_erc20(self.chains["base"].hub_token), self.chains["base"].hub_decimals)
+        celo = CeloExecutor(self.chains["celo"])
+        dec = token_decimals(self.token, "celo")
+        snap.celo_vchf = float(to_human(celo.balance_erc20(self.token.chains["celo"]), dec))
+        snap.celo_usdt = float(
+            to_human(celo.balance_erc20(self.chains["celo"].hub_token), self.chains["celo"].hub_decimals)
         )
 
         sol = SolanaExecutor(self.chains["solana"])
@@ -158,7 +160,7 @@ class TreasuryManager:
 
         self._ledger.reconcile(
             platform_token=snap.platform_vchf,
-            base_token=snap.base_vchf,
+            celo_token=snap.celo_vchf,
             sol_token=snap.sol_vchf,
             api_withdrawals=api_withdrawals or None,
         )
@@ -183,43 +185,43 @@ class TreasuryManager:
         moved = 0.0
         bridge = VnxBridge(self.cfg)
 
-        bc = os.getenv("VNX_BASE_BLOCKCHAIN", "BASE")
-        base_min = min_deposit_vchf(bc)
-        if snap.base_vchf > self.dust and snap.base_vchf < base_min:
+        bc = os.getenv("VNX_CELO_BLOCKCHAIN", "CELO")
+        celo_min = min_deposit_vchf(bc)
+        if snap.celo_vchf > self.dust and snap.celo_vchf < celo_min:
             logger.warning(
-                "Stuck Base VCHF %.4f: above dust (%.2f) but below VNX min deposit (%.2f)",
-                snap.base_vchf,
+                "Stuck Celo VCHF %.4f: above dust (%.2f) but below VNX min deposit (%.2f)",
+                snap.celo_vchf,
                 self.dust,
-                base_min,
+                celo_min,
             )
-        if snap.base_vchf >= base_min:
-            qty = snap.base_vchf
+        if snap.celo_vchf >= celo_min:
+            qty = snap.celo_vchf
             dep_err = check_deposit_amount(bc, qty)
             if dep_err:
-                logger.warning("Skip Base VCHF consolidate (%.4f): %s", qty, dep_err)
+                logger.warning("Skip Celo VCHF consolidate (%.4f): %s", qty, dep_err)
             else:
-                logger.info("Treasury: deposit %.4f VCHF from Base → platform", qty)
-                base = BaseExecutor(self.chains["base"])
-                dec = token_decimals(self.token, "base")
+                logger.info("Treasury: deposit %.4f VCHF from Celo → platform", qty)
+                celo = CeloExecutor(self.chains["celo"])
+                dec = token_decimals(self.token, "celo")
 
-                async def base_dep(addr: str) -> str | None:
-                    return base.transfer_erc20(
-                        self.token.chains["base"], addr, from_human(qty, dec)
+                async def celo_dep(addr: str) -> str | None:
+                    return celo.transfer_erc20(
+                        self.token.chains["celo"], addr, from_human(qty, dec)
                     )
 
                 br = await bridge.bridge_vchf(
-                    direction="treasury_base_to_platform",
+                    direction="treasury_celo_to_platform",
                     quantity=qty,
                     source_blockchain=bc,
                     dest_blockchain=bc,
                     dest_label="platform",
-                    deposit_tx_builder=base_dep,
+                    deposit_tx_builder=celo_dep,
                     deposit_only=True,
                 )
                 if br.success:
                     moved += qty
                 else:
-                    logger.warning("Base VCHF consolidate failed: %s", br.error)
+                    logger.warning("Celo VCHF consolidate failed: %s", br.error)
 
         snap = await self.snapshot()
         sol_bc = os.getenv("VNX_SOL_BLOCKCHAIN", "SOL")
@@ -275,12 +277,17 @@ class TreasuryManager:
 
         snap = await self.snapshot()
 
+        for p in self._ledger.pending_vnx_withdraws():
+            notes.append(
+                f"{p.quantity:.2f} VCHF pending {p.blockchain} withdraw since {p.created_at[:19]}"
+            )
+
         if self._platform_vchf_only():
             ok, msg = await self.assert_vchf_home_policy()
             if not ok:
                 notes.append(msg)
 
-        if direction in ("base_to_solana", "solana_to_base"):
+        if direction in ("celo_to_solana", "solana_to_celo"):
             if not await self.ensure_platform_vchf_for_bridge(size_vchf):
                 notes.append(f"platform VCHF short for bridge ({snap.platform_vchf:.1f} < {size_vchf:.0f})")
                 return PrepareResult(False, direction, size_vchf, notes, consolidated)
@@ -289,6 +296,18 @@ class TreasuryManager:
             from src.vnx.bridge import VCHF_WITHDRAW_FEE_BUFFER
             from src.vnx.trading import VCHF_MIN_ORDER, _round_down, VCHF_USDC_QTY_DECIMALS
 
+            chain_key = "celo" if direction.endswith("celo") else "solana"
+            dest_bc = os.getenv(
+                "VNX_CELO_BLOCKCHAIN" if chain_key == "celo" else "VNX_SOL_BLOCKCHAIN",
+                "CELO" if chain_key == "celo" else "SOL",
+            )
+            pending = self._ledger.pending_for_blockchain(dest_bc)
+            if pending:
+                total_pending = sum(p.quantity for p in pending)
+                notes.append(
+                    f"awaiting in-flight VNX withdraw {total_pending:.2f} VCHF to {dest_bc} "
+                    "(will poll on-chain, not double-withdraw)"
+                )
             withdrawable = max(0.0, snap.platform_vchf - VCHF_WITHDRAW_FEE_BUFFER)
             if snap.platform_vchf >= size_vchf * 0.95:
                 pass
@@ -308,16 +327,16 @@ class TreasuryManager:
                 size_vchf = VCHF_MIN_ORDER
                 notes.append(f"will buy {size_vchf:.0f} VCHF on platform (order minimum)")
 
-        if direction in ("base_to_vnx", "base_to_solana"):
+        if direction in ("celo_to_vnx", "celo_to_solana"):
             need_usdt = size_vchf * 1.35
-            if snap.base_usdc < need_usdt * 0.9:
+            if snap.celo_usdt < need_usdt * 0.9:
                 notes.append(
-                    f"Base needs ≥{need_usdt:.0f} USDT (have {snap.base_usdc:.1f}) — "
-                    "fund via vnx_to_base or wormhole"
+                    f"Celo needs ≥{need_usdt:.0f} USDT (have {snap.celo_usdt:.1f}) — "
+                    "fund via vnx_to_celo or wormhole"
                 )
                 return PrepareResult(False, direction, size_vchf, notes, consolidated)
 
-        if direction in ("solana_to_vnx", "solana_to_base"):
+        if direction in ("solana_to_vnx", "solana_to_celo"):
             need_usdc = size_vchf * 1.35
             if snap.sol_usdc < need_usdc * 0.9:
                 notes.append(

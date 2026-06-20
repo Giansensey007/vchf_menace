@@ -42,7 +42,7 @@ from src.bridge.hub_eth import (
 )
 from src.bridge.wormhole_queue import WormholeClaimQueue
 from src.config_loader import load_bot_config, load_chains, load_tokens, token_decimals
-from src.execution.base import BaseExecutor
+from src.execution.celo import CeloExecutor
 from src.execution.executor import ArbExecutor, CycleRecord, CycleState
 from src.execution.solana import SolanaExecutor
 from src.execution.tx_log import log_platform_order, log_tx, tx_log_path

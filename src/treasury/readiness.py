@@ -1,7 +1,6 @@
 """Production funding readiness vs config/production.yaml targets."""
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -9,13 +8,11 @@ from typing import Any
 import yaml
 
 from src.config_loader import CONFIG_DIR, load_bridge_config, load_chains, load_tokens, token_decimals
-from src.execution.base import BaseExecutor
+from src.execution.celo import CeloExecutor
 from src.execution.ethereum import ERC20_ABI, EthereumExecutor
 from src.execution.solana import SolanaExecutor
 from src.quotes.types import to_human
 from src.vnx.client import VnxClient
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -53,62 +50,41 @@ async def collect_balances() -> dict[str, float]:
     out: dict[str, float] = {}
 
     async with VnxClient() as vnx:
-        bal = await vnx.account_balance_resilient()
+        bal = await vnx.account_balance()
         out["platform_vchf"] = vnx.vchf_balance(bal)
         out["platform_usdc"] = vnx.usdc_balance(bal)
 
-    try:
-        base = BaseExecutor(chains["base"])
-        out["base_usdc"] = float(to_human(base.balance_erc20(chains["base"].hub_token), 6))
-        out["base_native"] = float(base.w3.from_wei(base.w3.eth.get_balance(base.address), "ether"))
-        dec = token_decimals(token, "base")
-        out["base_vchf"] = float(to_human(base.balance_erc20(token.chains["base"]), dec))
-    except Exception as exc:
-        logger.warning("Base balance poll failed: %s", exc)
-        out.setdefault("base_usdc", 0.0)
-        out.setdefault("base_native", 0.0)
-        out.setdefault("base_vchf", 0.0)
+    celo = CeloExecutor(chains["celo"])
+    out["celo_usdt"] = float(to_human(celo.balance_erc20(chains["celo"].hub_token), 6))
+    out["celo_native"] = float(celo.w3.from_wei(celo.w3.eth.get_balance(celo.address), "ether"))
+    dec = token_decimals(token, "celo")
+    out["celo_vchf"] = float(to_human(celo.balance_erc20(token.chains["celo"]), dec))
 
-    try:
-        wrapped = wh.get("base_usdc_wormhole_from_eth")
-        if wrapped:
-            base = BaseExecutor(chains["base"])
-            out["base_usdc_wrapped_eth"] = float(
-                to_human(
-                    base.w3.eth.contract(address=base.w3.to_checksum_address(wrapped), abi=ERC20_ABI)
-                    .functions.balanceOf(base.address)
-                    .call(),
-                    6,
-                )
+    wrapped = wh.get("celo_usdt_wormhole_from_eth")
+    if wrapped:
+        out["celo_usdt_wrapped_eth"] = float(
+            to_human(
+                celo.w3.eth.contract(address=celo.w3.to_checksum_address(wrapped), abi=ERC20_ABI)
+                .functions.balanceOf(celo.address)
+                .call(),
+                6,
             )
-    except Exception as exc:
-        logger.warning("Base wrapped USDC balance failed: %s", exc)
-
-    try:
-        sol = SolanaExecutor(chains["solana"])
-        from spl.token.instructions import get_associated_token_address
-        from solders.pubkey import Pubkey
-
-        usdc_ata = get_associated_token_address(
-            sol.keypair.pubkey(), Pubkey.from_string(chains["solana"].hub_token)
         )
-        out["sol_usdc"] = sol.token_balance_ui(usdc_ata)
-        out["sol_native"] = sol.balance_lamports() / 1e9
-    except Exception as exc:
-        logger.warning("Solana balance poll failed: %s", exc)
-        out.setdefault("sol_usdc", 0.0)
-        out.setdefault("sol_native", 0.0)
 
-    try:
-        eth = EthereumExecutor(chains["ethereum"])
-        out["eth_usdc"] = float(to_human(eth.balance_erc20(chains["ethereum"].hub_token), 6))
-        out["eth_usdt"] = float(to_human(eth.balance_erc20(wh["ethereum_usdt"]), 6))
-        out["eth_native"] = float(eth.w3.from_wei(eth.w3.eth.get_balance(eth.address), "ether"))
-    except Exception as exc:
-        logger.warning("ETH balance poll failed: %s", exc)
-        out.setdefault("eth_usdc", 0.0)
-        out.setdefault("eth_usdt", 0.0)
-        out.setdefault("eth_native", 0.0)
+    sol = SolanaExecutor(chains["solana"])
+    from spl.token.instructions import get_associated_token_address
+    from solders.pubkey import Pubkey
+
+    usdc_ata = get_associated_token_address(
+        sol.keypair.pubkey(), Pubkey.from_string(chains["solana"].hub_token)
+    )
+    out["sol_usdc"] = sol.token_balance_ui(usdc_ata)
+    out["sol_native"] = sol.balance_lamports() / 1e9
+
+    eth = EthereumExecutor(chains["ethereum"])
+    out["eth_usdc"] = float(to_human(eth.balance_erc20(chains["ethereum"].hub_token), 6))
+    out["eth_usdt"] = float(to_human(eth.balance_erc20(wh["ethereum_usdt"]), 6))
+    out["eth_native"] = float(eth.w3.from_wei(eth.w3.eth.get_balance(eth.address), "ether"))
 
     return out
 
@@ -120,23 +96,23 @@ async def funding_report(section: str = "production") -> tuple[list[FundingTarge
     labels = {
         "platform_vchf": "VNX VCHF",
         "platform_usdc": "VNX USDC",
-        "base_usdc": "Base USDT (canonical)",
+        "celo_usdt": "Celo USDT (canonical)",
         "sol_usdc": "Sol USDC",
         "eth_native": "ETH gas",
         "eth_usdc": "ETH USDC (hub)",
         "eth_usdt": "ETH USDT (hub)",
-        "base_native": "BASE gas",
+        "celo_native": "CELO gas",
         "sol_native": "SOL gas",
     }
     units = {
         "platform_vchf": "VCHF",
         "platform_usdc": "USDC",
-        "base_usdc": "USDT",
+        "celo_usdt": "USDT",
         "sol_usdc": "USDC",
         "eth_native": "ETH",
         "eth_usdc": "USDC",
         "eth_usdt": "USDT",
-        "base_native": "BASE",
+        "celo_native": "CELO",
         "sol_native": "SOL",
     }
 
@@ -163,9 +139,9 @@ def format_report(rows: list[FundingTarget], balances: dict[str, float]) -> str:
             f"  {'OK' if row.ok else '!!'} {row.label:<24} "
             f"{row.actual:>10.2f} / {row.target:.2f} {row.unit}  ({status})"
         )
-    wrapped = balances.get("base_usdc_wrapped_eth")
+    wrapped = balances.get("celo_usdt_wrapped_eth")
     if wrapped is not None and wrapped > 0.01:
-        lines.append(f"  -- Base wrapped ETH-USDT (Wormhole): {wrapped:.2f} USDT (not canonical)")
+        lines.append(f"  -- Celo wrapped ETH-USDT (Wormhole): {wrapped:.2f} USDT (not canonical)")
     ready = all(r.ok for r in rows)
     lines.append(f"\n{'PRODUCTION READY' if ready else 'UNDER-FUNDED — see gaps above'}")
     return "\n".join(lines)

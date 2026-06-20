@@ -260,7 +260,7 @@ async def test_vnx_to_chain_fails_on_sell():
 
     with patch("src.execution.executor.platform_buy_vchf", new=mock_buy):
         with patch("src.execution.executor.VnxBridge", return_value=mock_bridge):
-            with patch("src.execution.executor.BaseExecutor", return_value=mock_celo):
+            with patch("src.execution.executor.CeloExecutor", return_value=mock_celo):
                 with patch("src.execution.executor.VnxClient") as mock_vnx_cls:
                     vnx_inst = AsyncMock()
                     mock_vnx_cls.return_value.__aenter__.return_value = vnx_inst

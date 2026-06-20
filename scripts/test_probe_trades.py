@@ -24,7 +24,7 @@ from dotenv import load_dotenv
 load_dotenv(ROOT / ".env")
 
 from src.config_loader import is_dry_run, load_bot_config, load_chains, load_tokens, token_decimals
-from src.execution.base import BaseExecutor
+from src.execution.celo import CeloExecutor
 from src.execution.executor import ArbExecutor
 from src.execution.solana import SolanaExecutor
 from src.quotes.http_client import build_client
@@ -112,7 +112,7 @@ async def execute_swap_leg(chain_key: str, side: str, vchf: float) -> str | None
     dec = token_decimals(token, chain_key)
 
     if chain_key == "celo":
-        ex = BaseExecutor(chains["celo"])
+        ex = CeloExecutor(chains["celo"])
         if side == "buy":
             usdt = from_human(PROBE_STABLE_USD, chains["celo"].hub_decimals)
             min_out = int(vchf * 0.97 * 10**dec)
@@ -145,7 +145,7 @@ async def main() -> None:
 
     celo_addr = sol_addr = ""
     try:
-        celo_addr = BaseExecutor(load_chains()["celo"]).address
+        celo_addr = CeloExecutor(load_chains()["celo"]).address
     except Exception:
         pass
     try:
@@ -168,7 +168,7 @@ async def main() -> None:
             print(f"  {'OK' if ok else 'FAIL'}: {msg}")
 
         print("\n--- Route simulation @ 5 VCHF (loss OK; bridge dry-run below VNX min) ---")
-        for direction in ("base_to_solana", "solana_to_base"):
+        for direction in ("celo_to_solana", "solana_to_celo"):
             sim = await simulate_direction(client, chains, token, cfg, direction, PROBE_VCHF)
             print(
                 f"  {direction}: in=${sim.stable_in_usd:.2f} out=${sim.stable_out_usd:.2f} "
@@ -195,7 +195,7 @@ async def main() -> None:
         else:
             ex = ArbExecutor(chains, token, cfg)
             async with build_client() as client:
-                for d in ("base_to_solana", "solana_to_base"):
+                for d in ("celo_to_solana", "solana_to_celo"):
                     rec = await ex.run_cycle(client, d, PROBE_VCHF)
                     print(f"  {d}: state={rec.state.value} error={rec.error}")
     else:
