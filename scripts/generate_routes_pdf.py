@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -59,45 +60,71 @@ def _tex(s: str) -> str:
 
 
 ROUTE_STEPS: dict[str, list[str]] = {
+    "celo_to_solana": [
+        "Spend Celo USDT $\\rightarrow$ buy VCHF (CeloSwap)",
+        "Deposit VCHF to VNX (CELO, min 5 VCHF cumulative)",
+        "Withdraw VCHF to Solana",
+        "Sell VCHF for Sol USDC (Jupiter)",
+        "Wormhole USDT rebalance Celo $\\leftrightarrow$ Sol (stable leg)",
+    ],
+    "solana_to_celo": [
+        "Spend Sol USDC $\\rightarrow$ buy VCHF (Jupiter)",
+        "Deposit VCHF to VNX (SOL, min 5 VCHF)",
+        "Withdraw VCHF to Celo",
+        "Sell VCHF for Celo USDT (CeloSwap)",
+        "Wormhole USDT rebalance",
+    ],
     "base_to_solana": [
-        "Spend Base USDT $\\rightarrow$ buy VCHF (Ubeswap)",
+        "Spend Base USDC $\\rightarrow$ buy VCHF (KyberSwap)",
         "Deposit VCHF to VNX (BASE, min 5 VCHF cumulative)",
         "Withdraw VCHF to Solana",
         "Sell VCHF for Sol USDC (Jupiter)",
-        "Wormhole USDT rebalance Base $\\leftrightarrow$ Sol (stable leg)",
+        "Wormhole USDC rebalance Base $\\leftrightarrow$ Sol (stable leg)",
     ],
     "solana_to_base": [
         "Spend Sol USDC $\\rightarrow$ buy VCHF (Jupiter)",
         "Deposit VCHF to VNX (SOL, min 5 VCHF)",
         "Withdraw VCHF to Base",
-        "Sell VCHF for Base USDT (Ubeswap)",
-        "Wormhole USDT rebalance",
+        "Sell VCHF for Base USDC (KyberSwap)",
+        "Wormhole USDC rebalance",
+    ],
+    "celo_to_vnx": [
+        "Spend Celo USDT $\\rightarrow$ buy VCHF on Celo (CeloSwap)",
+        "Deposit VCHF to VNX platform (CELO)",
+        "Platform sell VCHF for USDC",
+        "Hub return: Wormhole Celo USDT $\\rightarrow$ ETH USDC $\\rightarrow$ VNX deposit",
+    ],
+    "vnx_to_celo": [
+        "Platform buy VCHF (min 30 VCHF order)",
+        "Withdraw VCHF to Celo",
+        "Sell VCHF for Celo USDT (CeloSwap)",
     ],
     "base_to_vnx": [
-        "Spend Base USDT $\\rightarrow$ buy VCHF on Base",
+        "Spend Base USDC $\\rightarrow$ buy VCHF on Base (KyberSwap)",
         "Deposit VCHF to VNX platform (BASE)",
         "Platform sell VCHF for USDC",
-        "Platform sell VCHF for USDC",
+        "Hub return: Wormhole Base USDC $\\rightarrow$ ETH $\\rightarrow$ VNX deposit",
     ],
     "vnx_to_base": [
-        "Platform buy VCHF (min 40 VCHF order)",
+        "Platform buy VCHF (min 30 VCHF order)",
         "Withdraw VCHF to Base",
-        "Sell VCHF for Base USDT",
+        "Sell VCHF for Base USDC (KyberSwap)",
     ],
     "solana_to_vnx": [
         "Spend Sol USDC $\\rightarrow$ buy VCHF (Jupiter)",
         "Deposit VCHF to VNX (SOL, min 5 VCHF)",
         "Platform sell VCHF for USDC",
+        "CCTP reconcile (Sol USDC $\\leftrightarrow$ ETH USDC probe)",
     ],
     "vnx_to_solana": [
-        "Platform buy VCHF (min 40 VCHF order)",
+        "Platform buy VCHF (min 30 VCHF order)",
         "Withdraw VCHF to Solana",
         "Sell VCHF for Sol USDC (Jupiter)",
     ],
     CCTP_SOL_USDC_TO_VNX: [
         "Burn Sol USDC via Circle CCTP $\\rightarrow$ Ethereum",
         "Claim USDC on ETH hot wallet",
-        "Deposit USDC to VNX platform (ETH, min 5 USDC)",
+        f"Deposit USDC to VNX platform (ETH, min {min_deposit_usdc('ETH'):.0f} USDC)",
         "Platform buy VCHF with credited USDC",
         "\\textit{Return leg after vnx\\_to\\_solana when origin = platform}",
     ],
@@ -108,9 +135,12 @@ HUB_ROUTES = [
     ("vnx\\_to\\_eth", "VNX platform USDC $\\rightarrow$ ETH hot wallet withdraw"),
     ("cctp\\_sol\\_to\\_eth", "Sol USDC $\\rightarrow$ ETH USDC (Circle CCTP)"),
     ("cctp\\_eth\\_to\\_sol", "ETH USDC $\\rightarrow$ Sol USDC (Circle CCTP)"),
-    ("wormhole\\_celo\\_to\\_eth", "Base USDT $\\rightarrow$ ETH USDT (Wormhole) + USDT$\\rightarrow$USDC swap"),
-    ("wormhole\\_eth\\_to\\_celo", "ETH USDT $\\rightarrow$ Base USDT (Wormhole)"),
-    ("celo\\_usdt\\_to\\_vnx\\_usdc", "Base USDT $\\rightarrow$ Wormhole $\\rightarrow$ ETH USDC $\\rightarrow$ VNX USDC"),
+    ("wormhole\\_celo\\_to\\_eth", "Celo USDT $\\rightarrow$ ETH USDT (Wormhole) + USDT$\\rightarrow$USDC swap"),
+    ("wormhole\\_eth\\_to\\_celo", "ETH USDT $\\rightarrow$ Celo USDT (Wormhole)"),
+    ("wormhole\\_base\\_to\\_eth", "Base USDC $\\rightarrow$ ETH USDC (Wormhole)"),
+    ("wormhole\\_eth\\_to\\_base", "ETH USDC $\\rightarrow$ Base USDC (Wormhole)"),
+    ("celo\\_usdt\\_to\\_vnx\\_usdc", "Celo USDT $\\rightarrow$ Wormhole $\\rightarrow$ ETH USDC $\\rightarrow$ VNX USDC"),
+    ("base\\_usdc\\_to\\_vnx\\_usdc", "Base USDC $\\rightarrow$ Wormhole $\\rightarrow$ ETH USDC $\\rightarrow$ VNX USDC"),
 ]
 
 
@@ -127,7 +157,7 @@ async def _live_scan() -> list[dict]:
     rows: list[dict] = []
 
     async with build_client() as client:
-        for size in (40.0, cfg.min_trade_vchf):
+        for size in (VNX_MIN_VCHF + 1.0, cfg.min_trade_vchf):
             for direction in ALL_DIRECTIONS:
                 origin = origin_for_direction(direction)
                 rt = await simulate_round_trip(
@@ -175,7 +205,7 @@ def _build_latex(live_rows: list[dict] | None) -> str:
         r"\begin{document}",
         r"\begin{center}",
         r"{\LARGE\bfseries\color{accent} VCHF Menace --- Route Map}\\[6pt]",
-        rf"{{\color{{muted}}\small Generated {now} · github.com/Giansensey007/gbp\_menace\_-}}\\[12pt]",
+        rf"{{\color{{muted}}\small Generated {now} · github.com/Giansensey007/vchf\_menace}}\\[12pt]",
         r"\end{center}",
         r"\section*{Configuration snapshot}",
         r"\begin{tabular}{@{}ll@{}}",
@@ -184,7 +214,7 @@ def _build_latex(live_rows: list[dict] | None) -> str:
         rf"Trade size & {cfg.min_trade_vchf:.0f}--{cfg.max_trade_vchf:.0f} VCHF \\",
         rf"Min profit & \${cfg.min_profit_usd:.2f} round-trip \\",
         rf"VNX platform order min & {VNX_MIN_VCHF:.0f} VCHF \\",
-        rf"VNX deposit min (BASE/SOL VCHF) & 5 VCHF cumulative \\",
+        rf"VNX deposit min (CELO/BASE/SOL VCHF) & 5 VCHF cumulative \\",
         rf"VNX deposit min (ETH USDC) & {min_deposit_usdc('ETH'):.0f} USDC \\",
         rf"enable\_vnx\_cctp\_routes & {str(cfg.enable_vnx_cctp_routes).lower()} \\",
         rf"enable\_vnx\_arb\_routes & {str(cfg.enable_vnx_arb_routes).lower()} \\",
@@ -193,10 +223,11 @@ def _build_latex(live_rows: list[dict] | None) -> str:
         r"\begin{itemize}[nosep]",
         r"\item \textbf{Platform (VNX):} all idle VCHF + USDC for \texttt{vnx\_to\_*} buys",
         r"\item \textbf{Celo:} USDT only (no idle VCHF; dust $\leq$ 0.5 VCHF swept to platform)",
+        r"\item \textbf{Base:} USDC only (no idle VCHF)",
         r"\item \textbf{Solana:} USDC only (no idle VCHF)",
         r"\item \textbf{Ethereum:} USDC/USDT hub buffers + gas (no VCHF)",
         r"\end{itemize}",
-        r"\section*{Arbitrage routes (6 directed pairs)}",
+        rf"\section*{{Arbitrage routes ({len(ALL_DIRECTIONS)} directed pairs)}}",
     ]
 
     for direction in ALL_DIRECTIONS:
@@ -246,11 +277,15 @@ def _build_latex(live_rows: list[dict] | None) -> str:
             r"Origin & Primary & Return leg & Ends on \\",
             r"\midrule",
             r"\endhead",
-            (r"Base USDT & celo\_to\_solana & solana\_to\_celo & Base USDT \\"),
-            (r"Base USDT & celo\_to\_vnx & vnx\_to\_celo & Base USDT \\"),
+            (r"Celo USDT & celo\_to\_solana & solana\_to\_celo & Celo USDT \\"),
+            (r"Celo USDT & celo\_to\_vnx & vnx\_to\_celo & Celo USDT \\"),
+            (r"Base USDC & base\_to\_solana & solana\_to\_base & Base USDC \\"),
+            (r"Base USDC & base\_to\_vnx & vnx\_to\_base & Base USDC \\"),
             (r"Sol USDC & solana\_to\_vnx & vnx\_to\_solana & Sol USDC \\"),
             (r"Sol USDC & solana\_to\_celo & celo\_to\_solana & Sol USDC \\"),
+            (r"Sol USDC & solana\_to\_base & base\_to\_solana & Sol USDC \\"),
             (r"Platform & vnx\_to\_celo & celo\_to\_vnx & Platform USDC \\"),
+            (r"Platform & vnx\_to\_base & base\_to\_vnx & Platform USDC \\"),
             (
                 r"Platform & vnx\_to\_solana & \textbf{cctp\_sol\_usdc\_to\_vnx} & Platform VCHF \\"
             ),
@@ -608,10 +643,12 @@ def main() -> int:
     DOCS.mkdir(parents=True, exist_ok=True)
 
     if args.executive:
-        tex = _build_executive_latex()
-        tex_path = DOCS / "vchf-menace-routes-executive.tex"
+        tex_path = DOCS / "vchf-menace-executive.tex"
         pdf_path = DOCS / "vchf-menace-routes-executive.pdf"
         engine = "lualatex"
+        if not tex_path.exists():
+            print(f"Missing {tex_path}", file=sys.stderr)
+            return 1
     else:
         live_rows = asyncio.run(_live_scan()) if args.live else None
         tex = _build_latex(live_rows)
@@ -619,8 +656,9 @@ def main() -> int:
         pdf_path = DOCS / "vchf-menace-routes.pdf"
         engine = "pdflatex"
 
-    tex_path.write_text(tex, encoding="utf-8")
-    print(f"Wrote {tex_path}")
+    if not args.executive:
+        tex_path.write_text(tex, encoding="utf-8")
+        print(f"Wrote {tex_path}")
 
     if args.no_compile:
         return 0
@@ -634,6 +672,9 @@ def main() -> int:
 
     if pdf_path.exists():
         print(f"Wrote {pdf_path}")
+        if args.executive and pdf_path.name != tex_path.with_suffix(".pdf").name:
+            shutil.copy2(tex_path.with_suffix(".pdf"), pdf_path)
+            print(f"Wrote {pdf_path}")
     else:
         print(f"{engine} finished but {pdf_path} not found", file=sys.stderr)
         return 1
