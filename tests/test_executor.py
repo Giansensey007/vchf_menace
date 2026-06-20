@@ -165,7 +165,7 @@ async def test_chain_to_vnx_deposits_then_platform_sells():
 
 
 @pytest.mark.asyncio
-async def test_chain_to_vnx_fails_on_swap():
+async def test_chain_to_vnx_blocked_when_platform_only():
     os.environ["DRY_RUN"] = "true"
     cfg = _bot_cfg()
     chains = load_chains()
@@ -175,7 +175,29 @@ async def test_chain_to_vnx_fails_on_swap():
     sim = _profitable_sim("solana_to_vnx")
 
     mock_sol = MagicMock()
+    mock_sol.token_balance_ui = MagicMock(return_value=0.0)
+
+    with patch("src.execution.executor.SolanaExecutor", return_value=mock_sol):
+        with patch("src.execution.executor.log_cycle_step"):
+            await ex._exec_chain_to_vnx(AsyncMock(), record, sim, "solana")
+
+    assert record.state == CycleState.FAILED
+    assert record.error and "blocked" in record.error
+
+
+@pytest.mark.asyncio
+async def test_chain_to_vnx_fails_on_swap_when_chain_buy_allowed():
+    os.environ["DRY_RUN"] = "true"
+    cfg = _bot_cfg(platform_vchf_only=False)
+    chains = load_chains()
+    token = load_tokens()["VCHF"]
+    ex = ArbExecutor(chains, token, cfg)
+    record = CycleRecord(id="t2b", direction="solana_to_vnx", size_vchf=500)
+    sim = _profitable_sim("solana_to_vnx")
+
+    mock_sol = MagicMock()
     mock_sol.swap = AsyncMock(return_value=None)
+    mock_sol.token_balance_ui = MagicMock(return_value=0.0)
 
     with patch("src.execution.executor.SolanaExecutor", return_value=mock_sol):
         with patch("src.execution.executor.log_cycle_step"):

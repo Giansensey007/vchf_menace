@@ -30,6 +30,7 @@ if not os.getenv("BASE_PRIVATE_KEY", "").strip() and os.getenv("CELO_PRIVATE_KEY
     os.environ["BASE_PRIVATE_KEY"] = os.environ["CELO_PRIVATE_KEY"]
 
 from src.vnx.deposits import check_usdc_deposit_amount, min_deposit_usdc
+from src.bridge.cctp import CircleCctpBridge
 from src.bridge.cctp_queue import CctpClaimQueue
 from src.bridge.hub_eth import (
     base_usdc_to_sol_usdc,
@@ -198,7 +199,7 @@ async def step_wormhole_preflight() -> bool:
     else:
         _log(f"\n=== Wormhole preflight ETH→Base: SKIP (ETH USDT {eth_usdt:.2f} — sim when funded) ===")
 
-    if base_usdc >= 0.05:
+    if base_usdc >= 1.0:
         celo_probe = min(1.0, base_usdc * 0.9)
         rc = await wormhole_check(celo_probe, execute=False)
         _log(f"=== Wormhole preflight Base outbound (${celo_probe:.2f} USDT): {'OK' if rc == 0 else 'FAIL'} ===")
@@ -206,7 +207,7 @@ async def step_wormhole_preflight() -> bool:
             _log("  (Base outbound sim failed — may need more canonical USDT or BASE gas)")
             return False
         return True
-    _log(f"SKIP Base→* sim (canonical USDT {base_usdc:.2f} < 0.05 — fund Base for outbound)")
+    _log(f"SKIP Base→* sim (canonical USDC {base_usdc:.2f} < 1.0 — fund Base for outbound)")
     return True
 
 
@@ -1034,7 +1035,8 @@ async def step_platform_probe() -> bool:
 
 
 async def step_simulate_all_routes() -> bool:
-    from src.scanner.routes import ALL_DIRECTIONS, active_directions
+    from src.platform_policy import on_chain_token_buy_blocked
+    from src.scanner.routes import ALL_DIRECTIONS, active_directions, route_for_direction
     from src.treasury.loops import origin_for_direction
 
     cfg = load_bot_config()
@@ -1045,6 +1047,10 @@ async def step_simulate_all_routes() -> bool:
     _log(f"\n=== Simulate all VCHF routes @ {TEST_VCHF} VCHF (quotes only) ===")
     async with build_client() as client:
         for direction in ALL_DIRECTIONS:
+            route = route_for_direction(direction)
+            if route and on_chain_token_buy_blocked(cfg, route.buy_chain):
+                _log(f"  SKIP [blocked] {direction}: platform-only (no on-chain token buy)")
+                continue
             sim = await simulate_direction(client, chains, token, cfg, direction, TEST_VCHF)
             if sim.error:
                 from src.quotes.api_gate import stagger_delay_ms

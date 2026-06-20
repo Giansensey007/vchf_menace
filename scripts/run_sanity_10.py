@@ -91,21 +91,31 @@ async def agent_sa01() -> AgentResult:
 
 
 async def agent_sa02() -> AgentResult:
-    from src.config_loader import load_chains, load_tokens, token_decimals
+    from src.config_loader import load_bot_config, load_chains, load_tokens, token_decimals
+    from src.platform_policy import on_chain_token_buy_blocked
     from src.quotes.http_client import build_client
     from src.quotes.router import buy_token_with_stable
     from src.quotes.types import from_human, to_human
 
+    cfg = load_bot_config()
     chains = load_chains()
     token = load_tokens()["VCHF"]
-    celo = chains["base"]
+    base = chains["base"]
     usdt = 70.0
     dec = token_decimals(token, "base")
 
+    if on_chain_token_buy_blocked(cfg, "base"):
+        return AgentResult(
+            "SA-02",
+            "onchain-buy-blocked",
+            True,
+            "platform_vchf_only: Base stable→VCHF buy correctly blocked",
+        )
+
     async with build_client() as client:
-        q = await buy_token_with_stable(client, celo, token, "base", from_human(usdt, celo.hub_decimals))
+        q = await buy_token_with_stable(client, base, token, "base", from_human(usdt, base.hub_decimals))
     if not q:
-        return AgentResult("SA-02", "live-celo-onchain-buy", False, "no quote")
+        return AgentResult("SA-02", "live-base-onchain-buy", False, "no quote")
     vchf = float(to_human(q.amount_out, dec))
     rate = usdt / vchf if vchf else 0
     ok = 1.0 < rate < 2.0
@@ -273,17 +283,17 @@ async def _simulate(direction: str, size: float) -> AgentResult:
     if not sane and sim.error is None:
         parts.append(f"sanity_issues={issues}")
 
-    agent_id = "SA-07" if direction == "base_to_solana" else "SA-08"
+    agent_id = "SA-07" if direction == "vnx_to_solana" else "SA-08"
     name = f"live-sim-{direction.replace('_', '-')}"
     return AgentResult(agent_id, name, ok, " | ".join(parts))
 
 
 async def agent_sa07() -> AgentResult:
-    return await _simulate("base_to_solana", 50.0)
+    return await _simulate("vnx_to_solana", 50.0)
 
 
 async def agent_sa08() -> AgentResult:
-    return await _simulate("solana_to_base", 50.0)
+    return await _simulate("vnx_to_base", 50.0)
 
 
 async def agent_sa09() -> AgentResult:

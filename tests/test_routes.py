@@ -48,7 +48,11 @@ def test_celo_sol_bridge_fee():
 def test_vnx_arb_enabled_by_default():
     from src.scanner.routes import active_directions
 
-    assert set(active_directions(load_bot_config())) == EXPECTED_DIRECTIONS
+    assert set(active_directions(load_bot_config())) == {
+        "vnx_to_celo",
+        "vnx_to_base",
+        "vnx_to_solana",
+    }
 
 
 def test_active_routes_respects_env(monkeypatch):
@@ -60,4 +64,4 @@ def test_active_routes_respects_env(monkeypatch):
     assert "vnx_to_base" not in active
     assert "celo_to_vnx" not in active
     assert "vnx_to_celo" not in active
-    assert len(active) == 6
+    assert active == {"vnx_to_solana"}

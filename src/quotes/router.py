@@ -4,7 +4,8 @@ import asyncio
 
 import httpx
 
-from src.config_loader import ChainConfig, TokenConfig, token_decimals
+from src.config_loader import ChainConfig, TokenConfig, load_bot_config, token_decimals
+from src.platform_policy import on_chain_token_buy_blocked
 from src.quotes import jupiter, kyber, onchain, vnx
 from src.quotes.api_gate import api_sync
 from src.quotes.types import ProviderQuote, QuoteResult
@@ -107,6 +108,8 @@ async def buy_token_with_stable(
     chain_key: str,
     stable_amount: int,
 ) -> QuoteResult | None:
+    if on_chain_token_buy_blocked(load_bot_config(), chain_key):
+        return None
     token_addr = token.chains.get(chain_key)
     if not token_addr:
         return None

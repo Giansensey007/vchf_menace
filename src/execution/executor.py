@@ -29,6 +29,7 @@ from src.scanner.routes import CCTP_SOL_USDC_TO_VNX, route_for_direction
 from src.scanner.simulator import CycleSimulation, simulate_cctp_usdc_return_to_vnx, simulate_direction
 from src.vnx.bridge import VnxBridge
 from src.vnx.client import VnxClient
+from src.platform_policy import on_chain_buy_blocked_message, on_chain_token_buy_blocked
 from src.vnx.trading import platform_buy_vchf, platform_sell_vchf
 
 logger = logging.getLogger(__name__)
@@ -151,9 +152,18 @@ class ArbExecutor:
             os.getenv("VNX_SOL_WITHDRAW_LABEL", "sol-hot"),
         )
 
-    def _may_reuse_on_chain_vchf(self) -> bool:
-        """Platform-only treasury: always buy VCHF from hub stable, never reuse chain inventory."""
-        return not self.bot_cfg.platform_vchf_only
+    def _reject_on_chain_buy(
+        self, record: CycleRecord, chain_key: str, on_chain: float, target: float
+    ) -> bool:
+        """Return True when execution must stop (platform-only blocks on-chain stable→token buy)."""
+        if on_chain >= target * 0.99:
+            return False
+        if on_chain_token_buy_blocked(self.bot_cfg, chain_key):
+            record.state = CycleState.FAILED
+            record.error = on_chain_buy_blocked_message(self.bot_cfg, chain_key)
+            return True
+        return False
+
 
     async def run_cycle(
         self,
@@ -368,7 +378,9 @@ class ArbExecutor:
         if on_chain >= max(target * 0.99, celo_dep_min * 0.99):
             vchf_amt = min(on_chain, target)
             logger.info("Celo already has %.2f VCHF — skip buy (bridge inventory)", on_chain)
-        elif self._may_reuse_on_chain_vchf() and on_chain >= target * 0.99:
+        if self._reject_on_chain_buy(record, "celo", on_chain, target):
+            return
+        if on_chain >= target * 0.99:
             vchf_amt = min(on_chain, target)
             logger.info("Celo already has %.2f VCHF — skip buy", on_chain)
         else:
@@ -489,7 +501,9 @@ class ArbExecutor:
         except Exception:
             on_chain = 0.0
 
-        if self._may_reuse_on_chain_vchf() and on_chain >= target * 0.99:
+        if self._reject_on_chain_buy(record, "solana", on_chain, target):
+            return
+        if on_chain >= target * 0.99:
             vchf_amt = min(on_chain, target)
             logger.info("Solana already has %.2f VCHF — skip buy, deposit %.2f", on_chain, vchf_amt)
         else:
@@ -604,7 +618,9 @@ class ArbExecutor:
 
         # Leg 1: USDT -> VCHF on Base (skip if already holding enough)
         on_chain = float(to_human(base_exec.balance_erc20(self.token.chains["base"]), base_dec))
-        if self._may_reuse_on_chain_vchf() and on_chain >= target * 0.99:
+        if self._reject_on_chain_buy(record, "base", on_chain, target):
+            return
+        if on_chain >= target * 0.99:
             vchf_amt = min(on_chain, target)
             logger.info("Base already has %.2f VCHF — skip buy", on_chain)
         else:
@@ -768,7 +784,9 @@ class ArbExecutor:
         except Exception:
             on_chain = 0.0
 
-        if self._may_reuse_on_chain_vchf() and on_chain >= target * 0.99:
+        if self._reject_on_chain_buy(record, "solana", on_chain, target):
+            return
+        if on_chain >= target * 0.99:
             vchf_amt = min(on_chain, target)
             logger.info("Solana already has %.2f VCHF — skip buy, deposit %.2f", on_chain, vchf_amt)
         else:
@@ -878,7 +896,9 @@ class ArbExecutor:
             celo_exec = CeloExecutor(self.celo)
             dec = token_decimals(self.token, "celo")
             on_chain = float(to_human(celo_exec.balance_erc20(self.token.chains["celo"]), dec))
-            if self._may_reuse_on_chain_vchf() and on_chain >= target * 0.99:
+            if self._reject_on_chain_buy(record, "celo", on_chain, target):
+                return
+            if on_chain >= target * 0.99:
                 vchf_amt = min(on_chain, target)
             else:
                 usdt_in = from_human(sim.stable_in_usd, self.celo.hub_decimals)
@@ -895,7 +915,9 @@ class ArbExecutor:
             base_exec = BaseExecutor(self.base)
             dec = token_decimals(self.token, "base")
             on_chain = float(to_human(base_exec.balance_erc20(self.token.chains["base"]), dec))
-            if self._may_reuse_on_chain_vchf() and on_chain >= target * 0.99:
+            if self._reject_on_chain_buy(record, "base", on_chain, target):
+                return
+            if on_chain >= target * 0.99:
                 vchf_amt = min(on_chain, target)
                 logger.info("Base already has %.2f VCHF — skip buy", on_chain)
             else:
@@ -928,7 +950,9 @@ class ArbExecutor:
             eth_exec = EthereumExecutor(self.eth)
             dec = token_decimals(self.token, "ethereum")
             on_chain = float(to_human(eth_exec.balance_erc20(self.token.chains["ethereum"]), dec))
-            if self._may_reuse_on_chain_vchf() and on_chain >= target * 0.99:
+            if self._reject_on_chain_buy(record, "ethereum", on_chain, target):
+                return
+            if on_chain >= target * 0.99:
                 vchf_amt = min(on_chain, target)
                 logger.info("ETH already has %.2f VCHF — skip buy", on_chain)
             else:
@@ -980,7 +1004,9 @@ class ArbExecutor:
                 on_chain = sol_exec.token_balance_ui(vchf_ata)
             except Exception:
                 on_chain = 0.0
-            if self._may_reuse_on_chain_vchf() and on_chain >= target * 0.99:
+            if self._reject_on_chain_buy(record, "solana", on_chain, target):
+                return
+            if on_chain >= target * 0.99:
                 vchf_amt = min(on_chain, target)
                 logger.info("Solana already has %.2f VCHF — skip buy", on_chain)
             else:

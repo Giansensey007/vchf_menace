@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from src.config_loader import BotConfig, load_bot_config
+from src.platform_policy import on_chain_token_buy_blocked
 
 # Dual EVM hubs: Celo (USDT) + Base (USDC) alongside Sol/VNX — 10 directed routes.
 ROUTE_PAIRS: tuple[tuple[str, str], ...] = (
@@ -110,6 +111,8 @@ def active_routes(cfg: BotConfig | None = None) -> tuple[RouteSpec, ...]:
     cfg = cfg or load_bot_config()
     routes: list[RouteSpec] = []
     for r in ALL_ROUTES:
+        if on_chain_token_buy_blocked(cfg, r.buy_chain):
+            continue
         if r.route_group == "celo_sol":
             routes.append(r)
         elif r.route_group == "base_sol":

@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 import httpx
 
 from src.config_loader import BotConfig, ChainConfig, TokenConfig, token_decimals
+from src.platform_policy import on_chain_buy_blocked_message, on_chain_token_buy_blocked
 from src.bridge.hub_usdt import (
     normalize_hub_to_usdt,
     usdc_raw_for_solana_buy,
@@ -40,11 +41,18 @@ async def _stable_cost_to_buy_vchf(
     token: TokenConfig,
     chain_key: str,
     size_vchf: float,
+    cfg: BotConfig | None = None,
 ) -> tuple[float, float, object | None]:
     """
     USDC cost to acquire `size_vchf` on chain_key (matches executor fixed-size legs).
     Returns (stable_in_usd, token_mid, buy_quote).
     """
+    from src.config_loader import load_bot_config
+
+    cfg = cfg or load_bot_config()
+    if on_chain_token_buy_blocked(cfg, chain_key):
+        return 0.0, 0.0, None
+
     chain_cfg = chains[chain_key]
     dec = token_decimals(token, chain_key)
     amount_in = from_human(size_vchf, dec)
@@ -97,8 +105,23 @@ async def _simulate_fixed_size_vnx_route(
     sell_dec = token_decimals(token, sell_key)
     notes: list[str] = []
 
+    if on_chain_token_buy_blocked(cfg, buy_key):
+        return CycleSimulation(
+            direction=direction,
+            buy_chain=buy_key,
+            sell_chain=sell_key,
+            size_vchf=size_vchf,
+            stable_in_usd=0,
+            stable_out_usd=0,
+            token_mid=0,
+            net_profit_usd=0,
+            profitable=False,
+            needs_bridge=route.needs_bridge,
+            error=on_chain_buy_blocked_message(cfg, buy_key),
+        )
+
     stable_in, token_mid, buy_q = await _stable_cost_to_buy_vchf(
-        client, chains, token, buy_key, size_vchf
+        client, chains, token, buy_key, size_vchf, cfg
     )
     if not buy_q:
         return CycleSimulation(
@@ -324,6 +347,21 @@ async def simulate_route(
             profitable=False,
             needs_bridge=route.needs_bridge,
             error=f"below VNX min order ({VNX_MIN_VCHF} VCHF)",
+        )
+
+    if on_chain_token_buy_blocked(cfg, buy_key):
+        return CycleSimulation(
+            direction=direction,
+            buy_chain=buy_key,
+            sell_chain=sell_key,
+            size_vchf=size_vchf,
+            stable_in_usd=0,
+            stable_out_usd=0,
+            token_mid=0,
+            net_profit_usd=0,
+            profitable=False,
+            needs_bridge=route.needs_bridge,
+            error=on_chain_buy_blocked_message(cfg, buy_key),
         )
 
     if _is_vnx_route(buy_key, sell_key):

@@ -188,6 +188,8 @@ Use `python scripts/rebalance_for_test.py` after funding to reach route-test min
 | VCHF deposit min (BASE/SOL) | 5 VCHF cumulative | `src/vnx/deposits.py` |
 | ETH USDC deposit min | 20 USDC cumulative | `src/vnx/deposits.py` |
 | Platform buy/sell min | 30 VCHF | `src/vnx/trading.py`, VNX `VCHF/USDC` |
+| **Platform-only treasury** | `platform_vchf_only=true` | VCHF on VNX only; no on-chain stable→VCHF buy (`src/platform_policy.py`) |
+| Active scanner routes (default) | `vnx_to_celo`, `vnx_to_base`, `vnx_to_solana` | Token-buy legs excluded when `platform_vchf_only` |
 | `platform_vchf_only` | true | treasury + executor |
 | Solana RPC throttle | 800 ms + 429 backoff | `.env.example`, `src/execution/sol_rpc.py` |
 | VNX collision retry | 3 × 5s backoff | `VNX_COLLISION_RETRY_MAX` |

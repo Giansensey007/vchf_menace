@@ -127,9 +127,6 @@ def test_cctp_routes_active_by_default():
 
     cfg = load_bot_config()
     active = set(active_directions(cfg))
-    assert "celo_to_solana" in active
-    assert "base_to_solana" in active
-    assert "solana_to_vnx" in active
-    assert "vnx_to_solana" in active
-    assert "base_to_vnx" in active
-    assert "vnx_to_base" in active
+    assert active == {"vnx_to_celo", "vnx_to_base", "vnx_to_solana"}
+    assert "celo_to_solana" not in active
+    assert "solana_to_vnx" not in active

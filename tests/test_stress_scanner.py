@@ -122,47 +122,32 @@ class TestChooseExecution:
 
 
 class TestActiveRoutes:
-    def test_default_ten_routes(self):
+    def test_default_platform_only_routes(self):
         cfg = _cfg()
         routes = active_routes(cfg)
-        assert len(routes) == 10
+        assert len(routes) == 3
         dirs = {r.direction for r in routes}
-        assert dirs == {
-            "celo_to_solana",
-            "solana_to_celo",
-            "celo_to_vnx",
-            "vnx_to_celo",
-            "base_to_solana",
-            "solana_to_base",
-            "base_to_vnx",
-            "vnx_to_base",
-            "solana_to_vnx",
-            "vnx_to_solana",
-        }
+        assert dirs == {"vnx_to_celo", "vnx_to_base", "vnx_to_solana"}
+
+    def test_legacy_ten_routes_when_chain_buy_allowed(self):
+        cfg = _cfg(platform_vchf_only=False)
+        routes = active_routes(cfg)
+        assert len(routes) == 10
 
     def test_arb_disabled_drops_evm_vnx(self):
         cfg = _cfg(enable_vnx_arb_routes=False)
-        assert len(active_routes(cfg)) == 6
-        assert "base_to_vnx" not in active_directions(cfg)
-        assert "celo_to_vnx" not in active_directions(cfg)
+        assert len(active_routes(cfg)) == 1
+        assert active_directions(cfg) == ("vnx_to_solana",)
 
     def test_cctp_disabled(self):
         cfg = _cfg(enable_vnx_cctp_routes=False)
-        assert len(active_routes(cfg)) == 8
-        assert set(active_directions(cfg)) == {
-            "celo_to_solana",
-            "solana_to_celo",
-            "celo_to_vnx",
-            "vnx_to_celo",
-            "base_to_solana",
-            "solana_to_base",
-            "base_to_vnx",
-            "vnx_to_base",
-        }
+        assert len(active_routes(cfg)) == 2
+        assert set(active_directions(cfg)) == {"vnx_to_celo", "vnx_to_base"}
 
-    def test_all_routes_when_both_enabled(self, monkeypatch):
+    def test_all_routes_when_both_enabled_legacy(self, monkeypatch):
         monkeypatch.setenv("ENABLE_VNX_ARB_ROUTES", "true")
         monkeypatch.setenv("ENABLE_VNX_CCTP_ROUTES", "true")
+        monkeypatch.setenv("PLATFORM_VCHF_ONLY", "false")
         from src.config_loader import load_bot_config
 
         cfg = load_bot_config()
