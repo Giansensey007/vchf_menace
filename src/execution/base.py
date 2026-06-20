@@ -100,6 +100,7 @@ class BaseExecutor:
             raise ValueError("BASE swap router not configured")
         self.router = checksum(router)
         self.w3 = connect_base_web3(chain.rpc_url)
+        self.last_error: str | None = None
 
     @property
     def address(self) -> str:
@@ -234,6 +235,69 @@ class BaseExecutor:
         contract = self.w3.eth.contract(address=checksum(token), abi=ERC20_ABI)
         fn = contract.functions.transfer(checksum(to), amount)
         tx = fn.build_transaction(self._tx_base(fn))
+        return self._build_and_send(tx)
+
+    def deposit_for_burn(
+        self,
+        *,
+        token_messenger: str,
+        usdc: str,
+        amount: int,
+        destination_domain: int,
+        mint_recipient: bytes,
+        max_fee: int,
+        min_finality_threshold: int,
+    ) -> str | None:
+        """Circle CCTP v2 depositForBurn on Base (TokenMessengerV2, shared EVM address)."""
+        if len(mint_recipient) != 32:
+            raise ValueError("mint_recipient must be 32 bytes")
+
+        from src.execution.ethereum import TOKEN_MESSENGER_V2_ABI, ZERO_BYTES32
+        from src.execution.token_approvals import check_allowance
+
+        err = check_allowance(self.w3, self.account.address, usdc, token_messenger, amount)
+        if err:
+            self.last_error = err
+            logger.error(err)
+            return None
+
+        tm = self.w3.eth.contract(address=checksum(token_messenger), abi=TOKEN_MESSENGER_V2_ABI)
+        fn = tm.functions.depositForBurn(
+            amount,
+            destination_domain,
+            mint_recipient,
+            checksum(usdc),
+            ZERO_BYTES32,
+            max_fee,
+            min_finality_threshold,
+        )
+        tx = fn.build_transaction(self._tx_base(fn))
+        return self._build_and_send(tx)
+
+    def receive_message(
+        self,
+        *,
+        message_transmitter: str,
+        message_hex: str,
+        attestation_hex: str,
+    ) -> str | None:
+        """Circle CCTP v2 receiveMessage on Base (MessageTransmitterV2, shared EVM address)."""
+        from src.execution.ethereum import MESSAGE_TRANSMITTER_V2_ABI
+
+        mt = self.w3.eth.contract(
+            address=checksum(message_transmitter), abi=MESSAGE_TRANSMITTER_V2_ABI
+        )
+        message = bytes.fromhex(message_hex.removeprefix("0x"))
+        attestation = bytes.fromhex(attestation_hex.removeprefix("0x"))
+        fn = mt.functions.receiveMessage(message, attestation)
+        try:
+            base = self._tx_base(fn)
+        except Exception as exc:
+            if "nonce already used" in str(exc).lower():
+                logger.info("CCTP message already claimed on Base (nonce used)")
+                return "already-claimed"
+            raise
+        tx = fn.build_transaction(base)
         return self._build_and_send(tx)
 
     def complete_transfer_wormhole(self, bridge: str, vaa: bytes) -> str | None:

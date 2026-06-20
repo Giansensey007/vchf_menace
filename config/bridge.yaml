@@ -38,10 +38,15 @@ cctp:
   iris_api: https://iris-api.circle.com
   solana_domain: 5
   ethereum_domain: 0
+  base_domain: 6
   solana_usdc: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
   ethereum_usdc: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+  base_usdc: "0x833589fCD6eDb6E08f4c7C32D4F71b54bda02913"
   ethereum_token_messenger: "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d"
   ethereum_message_transmitter: "0x81D40F21F12A8F0E3252Bccb954D722d4c464B64"
+  # CCTP v2 deploys TokenMessengerV2 / MessageTransmitterV2 at the same address on every EVM chain
+  base_token_messenger: "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d"
+  base_message_transmitter: "0x81D40F21F12A8F0E3252Bccb954D722d4c464B64"
   solana_token_messenger_minter: "CCTPV2vPZJS2u2BBsUoscuikbYjnpFmbFsvVuJdgUMQe"
   solana_message_transmitter: "CCTPV2Sm4AdWt5296sk4P66VBZ7bEhcARwFaaS9YPbeC"
   fast_finality_threshold: 1000

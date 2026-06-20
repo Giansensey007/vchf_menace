@@ -10,6 +10,8 @@ from src.config_loader import BotConfig, ChainConfig, TokenConfig
 from src.platform_policy import (
     on_chain_buy_blocked_message,
     on_chain_token_buy_blocked,
+    platform_buy_opener_blocked,
+    platform_buy_opener_blocked_message,
     platform_token_only,
     route_requires_on_chain_token_buy,
 )
@@ -95,3 +97,20 @@ def test_route_requires_on_chain_token_buy():
 
 def test_blocked_message_mentions_platform_flag():
     assert "platform_vchf_only" in on_chain_buy_blocked_message(_cfg(), "celo")
+
+
+def test_on_chain_buyback_leg_allowed_under_platform_only():
+    cfg = _cfg()
+    assert on_chain_token_buy_blocked(cfg, "celo")
+    assert on_chain_token_buy_blocked(cfg, "base")
+    assert not on_chain_token_buy_blocked(cfg, "celo", is_buyback=True)
+    assert not on_chain_token_buy_blocked(cfg, "base", is_buyback=True)
+    assert not on_chain_token_buy_blocked(cfg, "vnx")
+
+
+def test_platform_buy_opener_blocked_except_buyback():
+    cfg = _cfg()
+    assert platform_buy_opener_blocked(cfg)
+    assert not platform_buy_opener_blocked(cfg, is_buyback=True)
+    assert not platform_buy_opener_blocked(_cfg(platform_only=False))
+    assert "platform_vchf_only" in platform_buy_opener_blocked_message(cfg)

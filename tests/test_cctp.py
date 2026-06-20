@@ -10,9 +10,42 @@ from src.bridge.cctp import CircleCctpBridge
 async def test_cctp_quote_rejects_unsupported_pair():
     bridge = CircleCctpBridge()
     async with httpx.AsyncClient() as client:
-        q = await bridge.quote_usdc(client, "base", "solana", 100.0)
+        # Celo is not a CCTP domain; same-chain is also invalid
+        q = await bridge.quote_usdc(client, "celo", "solana", 100.0)
+        same = await bridge.quote_usdc(client, "base", "base", 100.0)
     assert not q.ok
     assert q.error == "unsupported pair"
+    assert not same.ok
+    assert same.error == "unsupported pair"
+
+
+@pytest.mark.asyncio
+async def test_cctp_quote_supports_base_pairs():
+    bridge = CircleCctpBridge()
+    async with httpx.AsyncClient() as client:
+        for src, dst in (
+            ("base", "solana"),
+            ("solana", "base"),
+            ("base", "ethereum"),
+            ("ethereum", "base"),
+        ):
+            q = await bridge.quote_usdc(client, src, dst, 100.0)
+            assert q.ok, f"{src}->{dst} should be a supported direct CCTP route"
+            assert q.amount_out_usdc == pytest.approx(q.amount_in_usdc - q.fee_usd)
+
+
+@pytest.mark.asyncio
+async def test_cctp_base_bridges_dry_run():
+    bridge = CircleCctpBridge()
+    with patch("src.bridge.cctp.is_dry_run", return_value=True):
+        async with httpx.AsyncClient() as client:
+            r1 = await bridge.bridge_usdc_base_to_eth(client, 100.0)
+            r2 = await bridge.bridge_usdc_eth_to_base(client, 100.0)
+            r3 = await bridge.bridge_usdc_base_to_sol(client, 100.0)
+            r4 = await bridge.bridge_usdc_sol_to_base(client, 100.0)
+    for r in (r1, r2, r3, r4):
+        assert r.success and r.dry_run
+        assert r.source_tx and r.dest_tx
 
 
 @pytest.mark.asyncio

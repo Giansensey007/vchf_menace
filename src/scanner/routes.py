@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 
-from src.config_loader import BotConfig, load_bot_config
+from src.config_loader import BotConfig, TokenConfig, load_bot_config, load_tokens
 from src.platform_policy import on_chain_token_buy_blocked
 
 # Dual EVM hubs: Celo (USDT) + Base (USDC) alongside Sol/VNX — 10 directed routes.
@@ -165,3 +166,215 @@ def estimate_cctp_usdc_return_fees(cfg: BotConfig) -> float:
 
 
 CCTP_SOL_USDC_TO_VNX = "cctp_sol_usdc_to_vnx"
+
+
+# ---------------------------------------------------------------------------
+# Platform-first loop model (same-asset round trips)
+# ---------------------------------------------------------------------------
+# Every loop starts and ends with the same VNX token on the platform. The bot
+# never opens inventory with a platform buy or an on-chain buy; on-chain/platform
+# buys are only the loop-closing buy-back step (see platform_policy).
+#
+#   Loop 1 (outbound): withdraw token -> sell on X -> bridge stable X->ETH ->
+#                      VNX USDC deposit -> platform buy-back of same token.
+#   Loop 2 (inbound):  platform sell token -> USDC -> ETH -> bridge ETH->X ->
+#                      on-chain buy-back on X -> VNX token deposit.
+#   Loop 3 (cross):    withdraw token -> sell on A -> direct bridge A->B ->
+#                      on-chain buy-back on B -> VNX token deposit.
+
+# Hub stable per chain — drives bridge mechanism + accounting.
+CHAIN_STABLE: dict[str, str] = {
+    "celo": "USDT",
+    "base": "USDC",
+    "solana": "USDC",
+    "ethereum": "USDC",
+}
+
+# Chains whose native USDC is a Circle CCTP domain (direct burn-and-mint).
+CCTP_CHAINS: frozenset[str] = frozenset({"solana", "ethereum", "base"})
+
+# VNX USDC settlement chain (deposits/withdrawals to the platform clear here).
+HUB_CHAIN = "ethereum"
+
+LOOP1_OUTBOUND = "loop1_outbound"
+LOOP2_INBOUND = "loop2_inbound"
+LOOP3_CROSS = "loop3_cross"
+
+
+def bridge_mechanism(from_chain: str, to_chain: str) -> str:
+    """CCTP-first stable bridge selection.
+
+    Preference order: CCTP (USDC<->USDC direct) > Wormhole (any Celo USDT leg) >
+    ETH triangle (cross-stable pairs with no native direct bridge, e.g. Celo<->Base).
+    """
+    if from_chain == to_chain:
+        return "none"
+    pair = {from_chain, to_chain}
+    if pair <= CCTP_CHAINS:
+        return "cctp"
+    if "celo" in pair and pair <= {"celo", "solana", "ethereum"}:
+        return "wormhole"
+    return "eth_triangle"
+
+
+class StepKind(str, Enum):
+    WITHDRAW_TOKEN = "withdraw_token"            # platform -> chain
+    SELL_TOKEN_ONCHAIN = "sell_token_onchain"    # token -> stable on chain
+    PLATFORM_SELL_TOKEN = "platform_sell_token"  # token -> USDC on platform
+    WITHDRAW_USDC = "withdraw_usdc"              # platform USDC -> ETH
+    BRIDGE_STABLE = "bridge_stable"              # stable from -> to (CCTP/Wormhole/triangle)
+    VNX_USDC_DEPOSIT = "vnx_usdc_deposit"        # ETH USDC -> platform
+    PLATFORM_BUYBACK = "platform_buyback"        # USDC -> token on platform (buy-back only)
+    ONCHAIN_BUYBACK = "onchain_buyback"          # stable -> token on chain (buy-back only)
+    VNX_TOKEN_DEPOSIT = "vnx_token_deposit"      # chain token -> platform
+
+
+@dataclass(frozen=True)
+class LoopStep:
+    kind: StepKind
+    venue: str
+    detail: str = ""
+    is_buyback: bool = False
+    bridge_to: str | None = None
+    mechanism: str | None = None
+
+
+@dataclass(frozen=True)
+class LoopSpec:
+    """One full same-asset round trip (platform token -> ... -> platform token)."""
+
+    family: str
+    token: str
+    chain_a: str
+    chain_b: str | None = None
+    hub: str = HUB_CHAIN
+
+    @property
+    def key(self) -> str:
+        if self.chain_b:
+            return f"{self.family}:{self.chain_a}->{self.chain_b}"
+        return f"{self.family}:{self.chain_a}"
+
+    @property
+    def chains(self) -> tuple[str, ...]:
+        return (self.chain_a, self.chain_b) if self.chain_b else (self.chain_a,)
+
+    def steps(self) -> tuple[LoopStep, ...]:
+        if self.family == LOOP1_OUTBOUND:
+            return self._loop1_steps()
+        if self.family == LOOP2_INBOUND:
+            return self._loop2_steps()
+        if self.family == LOOP3_CROSS:
+            return self._loop3_steps()
+        raise ValueError(f"unknown loop family: {self.family}")
+
+    def _loop1_steps(self) -> tuple[LoopStep, ...]:
+        x = self.chain_a
+        steps = [
+            LoopStep(StepKind.WITHDRAW_TOKEN, x, f"withdraw {self.token} platform->{x}"),
+            LoopStep(StepKind.SELL_TOKEN_ONCHAIN, x, f"sell {self.token} for {CHAIN_STABLE[x]} on {x}"),
+        ]
+        # ETH-as-trading-chain (VNXAU) needs no hub bridge: USDC is already on ETH.
+        if x != self.hub:
+            steps.append(
+                LoopStep(
+                    StepKind.BRIDGE_STABLE, x, f"bridge stable {x}->{self.hub}",
+                    bridge_to=self.hub, mechanism=bridge_mechanism(x, self.hub),
+                )
+            )
+        steps.append(LoopStep(StepKind.VNX_USDC_DEPOSIT, self.hub, "deposit USDC ETH->platform"))
+        steps.append(
+            LoopStep(StepKind.PLATFORM_BUYBACK, "vnx", f"platform buy-back {self.token}", is_buyback=True)
+        )
+        return tuple(steps)
+
+    def _loop2_steps(self) -> tuple[LoopStep, ...]:
+        x = self.chain_a
+        steps = [
+            LoopStep(StepKind.PLATFORM_SELL_TOKEN, "vnx", f"platform sell {self.token} for USDC"),
+            LoopStep(StepKind.WITHDRAW_USDC, self.hub, "withdraw USDC platform->ETH"),
+        ]
+        if x != self.hub:
+            steps.append(
+                LoopStep(
+                    StepKind.BRIDGE_STABLE, self.hub, f"bridge stable {self.hub}->{x}",
+                    bridge_to=x, mechanism=bridge_mechanism(self.hub, x),
+                )
+            )
+        steps.append(
+            LoopStep(
+                StepKind.ONCHAIN_BUYBACK, x,
+                f"buy-back {self.token} with {CHAIN_STABLE[x]} on {x}", is_buyback=True,
+            )
+        )
+        steps.append(LoopStep(StepKind.VNX_TOKEN_DEPOSIT, x, f"deposit {self.token} {x}->platform"))
+        return tuple(steps)
+
+    def _loop3_steps(self) -> tuple[LoopStep, ...]:
+        a, b = self.chain_a, self.chain_b
+        assert b is not None
+        return (
+            LoopStep(StepKind.WITHDRAW_TOKEN, a, f"withdraw {self.token} platform->{a}"),
+            LoopStep(StepKind.SELL_TOKEN_ONCHAIN, a, f"sell {self.token} for {CHAIN_STABLE[a]} on {a}"),
+            LoopStep(
+                StepKind.BRIDGE_STABLE, a, f"bridge stable {a}->{b}",
+                bridge_to=b, mechanism=bridge_mechanism(a, b),
+            ),
+            LoopStep(
+                StepKind.ONCHAIN_BUYBACK, b,
+                f"buy-back {self.token} with {CHAIN_STABLE[b]} on {b}", is_buyback=True,
+            ),
+            LoopStep(StepKind.VNX_TOKEN_DEPOSIT, b, f"deposit {self.token} {b}->platform"),
+        )
+
+    @property
+    def bridge_legs(self) -> tuple[LoopStep, ...]:
+        return tuple(s for s in self.steps() if s.kind == StepKind.BRIDGE_STABLE)
+
+
+def _bot_token(tokens: dict[str, TokenConfig]) -> TokenConfig:
+    """The bot's single VNX token (the one deposited/withdrawn on the platform)."""
+    for t in tokens.values():
+        if "vnx" in t.chains:
+            return t
+    return next(iter(tokens.values()))
+
+
+def trading_chains(token: TokenConfig) -> tuple[str, ...]:
+    """On-chain venues where the token trades (platform 'vnx' excluded)."""
+    return tuple(c for c in token.chains if c != "vnx")
+
+
+def active_loops(
+    cfg: BotConfig | None = None, token: TokenConfig | None = None
+) -> tuple[LoopSpec, ...]:
+    """Generate every same-asset loop for this bot's trading chains.
+
+    Loop 1 + Loop 2: one each per trading chain. Loop 3: every ordered distinct
+    pair of trading chains. ETH is a trading chain only where the token is
+    deployed on it (VNXAU); for GBP/VCHF it is a hub-only settlement chain.
+    """
+    if token is None:
+        token = _bot_token(load_tokens())
+    tcs = trading_chains(token)
+    sym = token.symbol
+    loops: list[LoopSpec] = []
+    for x in tcs:
+        loops.append(LoopSpec(LOOP1_OUTBOUND, sym, x))
+        loops.append(LoopSpec(LOOP2_INBOUND, sym, x))
+    for a in tcs:
+        for b in tcs:
+            if a != b:
+                loops.append(LoopSpec(LOOP3_CROSS, sym, a, b))
+    return tuple(loops)
+
+
+def active_loop_keys(cfg: BotConfig | None = None) -> tuple[str, ...]:
+    return tuple(loop.key for loop in active_loops(cfg))
+
+
+def loop_for_key(key: str, cfg: BotConfig | None = None) -> LoopSpec | None:
+    for loop in active_loops(cfg):
+        if loop.key == key:
+            return loop
+    return None
