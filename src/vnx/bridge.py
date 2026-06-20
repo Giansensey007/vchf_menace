@@ -9,7 +9,12 @@ from dataclasses import dataclass
 from src.config_loader import BotConfig, is_dry_run, load_chains, load_tokens
 from src.treasury.in_flight import InFlightLedger, read_on_chain_token_balances
 from src.vnx.client import VnxClient
-from src.vnx.collision import collision_backoff_sec, collision_retry_max, is_vnx_collision_error, vnx_error_message
+from src.vnx.collision import (
+    collision_backoff_sec,
+    collision_retry_max,
+    is_vnx_collision_error,
+    vnx_error_message,
+)
 from src.vnx.trading import _round_down, VCHF_USDC_QTY_DECIMALS
 from src.vnx.deposits import check_deposit_amount
 
@@ -201,7 +206,7 @@ class VnxBridge:
                     dest_label,
                     direction,
                     txids,
-                    baseline_base_token=celo_base,
+                    baseline_celo_token=celo_base,
                     baseline_sol_token=sol_base,
                     baseline_platform_token=balance,
                 )
@@ -270,7 +275,10 @@ class VnxBridge:
                 if err_msg:
                     poll_errors += 1
                     if is_vnx_collision_error(err_msg):
+                        logger.warning("VNX balance poll contention (%s): %s", poll_errors, err_msg)
                         await asyncio.sleep(collision_backoff_sec(min(poll_errors - 1, 2)))
+                    else:
+                        logger.warning("VNX balance poll error: %s", err_msg)
                     continue
                 poll_errors = 0
                 credited = vnx.vchf_balance(bal_resp)
@@ -356,7 +364,7 @@ class VnxBridge:
                     dest_label,
                     direction,
                     txids,
-                    baseline_base_token=celo_base,
+                    baseline_celo_token=celo_base,
                     baseline_sol_token=sol_base,
                     baseline_platform_token=balance,
                 )

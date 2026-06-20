@@ -10,7 +10,7 @@ Order:
   1. Platform audit (CHF/USDC/VCHF)
   2. CHF→USDC conversion (if CHF >= 30 USDC worth)
   3. Platform VCHF buy/sell probe (30 VCHF min)
-  4. Celo + Sol swap probes (5 VCHF)
+  4. Base + Sol swap probes (5 VCHF)
   5. CCTP round-trip probe ($10 USDC) — optional with --cctp
 """
 from __future__ import annotations
@@ -30,7 +30,7 @@ load_dotenv(ROOT / ".env")
 
 from src.bridge.cctp import CircleCctpBridge
 from src.config_loader import is_dry_run, load_bot_config, load_chains, load_tokens, token_decimals
-from src.execution.celo import CeloExecutor
+from src.execution.base import BaseExecutor
 from src.execution.ethereum import EthereumExecutor
 from src.execution.solana import SolanaExecutor
 from src.quotes.http_client import build_client
@@ -58,10 +58,10 @@ async def audit_balances() -> bool:
     ok = True
 
     try:
-        celo = CeloExecutor(chains["celo"])
-        usdt = to_human(celo.balance_erc20(chains["celo"].hub_token), 6)
+        celo = BaseExecutor(chains["base"])
+        usdt = to_human(celo.balance_erc20(chains["base"].hub_token), 6)
         native = to_human(celo.balance_native(), 18)
-        _ok("Celo", f"{celo.address[:10]}… USDT={usdt:.2f} CELO={native:.4f}")
+        _ok("Celo", f"{celo.address[:10]}… USDT={usdt:.2f} BASE={native:.4f}")
     except Exception as exc:
         _fail("Celo", str(exc))
         ok = False
@@ -80,7 +80,7 @@ async def audit_balances() -> bool:
         eth_native = to_human(eth.balance_native(), 18)
         _ok("Ethereum", f"{eth.address[:10]}… USDC={usdc_eth:.2f} ETH={eth_native:.4f}")
         if usdc_eth < 1:
-            print("  WARN: ETH wallet has <1 USDC — CCTP ETH→Sol needs mainnet USDC on same key as CELO")
+            print("  WARN: ETH wallet has <1 USDC — CCTP ETH→Sol needs mainnet USDC on same key as BASE")
     except Exception as exc:
         _fail("Ethereum", str(exc))
         ok = False
@@ -92,10 +92,10 @@ async def audit_balances() -> bool:
         vchf = vnx.vchf_balance(bal)
         _ok("VNX Platform", f"CHF={chf:.2f} USDC={usdc:.2f} VCHF={vchf:.2f}")
 
-    vchf_dec = token_decimals(token, "celo")
+    vchf_dec = token_decimals(token, "base")
     try:
-        celo_vchf = to_human(CeloExecutor(chains["celo"]).balance_erc20(token.chains["celo"]), vchf_dec)
-        _ok("Celo VCHF on-chain", f"{celo_vchf:.2f}")
+        celo_vchf = to_human(BaseExecutor(chains["base"]).balance_erc20(token.chains["base"]), vchf_dec)
+        _ok("Base VCHF on-chain", f"{celo_vchf:.2f}")
     except Exception:
         pass
 
@@ -198,7 +198,7 @@ async def main() -> None:
 
     print("VCHF Menace live test")
     print(f"  DRY_RUN={os.getenv('DRY_RUN', 'true')}")
-    print(f"  VNX labels: CELO={os.getenv('VNX_CELO_WITHDRAW_LABEL')} SOL={os.getenv('VNX_SOL_WITHDRAW_LABEL')}")
+    print(f"  VNX labels: BASE={os.getenv('VNX_BASE_WITHDRAW_LABEL')} SOL={os.getenv('VNX_SOL_WITHDRAW_LABEL')}")
 
     if args.execute and is_dry_run():
         print("\nERROR: --execute requires DRY_RUN=false in .env")

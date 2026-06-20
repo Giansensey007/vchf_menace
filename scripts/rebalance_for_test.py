@@ -5,7 +5,7 @@ Rebalance platform + chains before full route test.
 Targets (platform-centric treasury):
   - Platform: >= 32 VCHF (all inventory) + >= 54 USDC for vnx_to_* buys
   - Solana:   >= 53 USDC only (no on-chain VCHF)
-  - Celo:     >= 53 USDT only (no on-chain VCHF)
+  - Base:     >= 53 USDT only (no on-chain VCHF)
   - Ethereum: >= 3 USDC buffer + gas ETH (hub only)
 
 Usage:
@@ -31,11 +31,11 @@ load_dotenv(ROOT / ".env")
 
 from src.bridge.cctp import CircleCctpBridge
 from src.bridge.cctp_queue import CctpClaimQueue
-from src.bridge.hub_eth import eth_usdc_to_vnx, wormhole_celo_to_eth, wormhole_eth_to_celo
+from src.bridge.hub_eth import eth_usdc_to_vnx, wormhole_base_to_eth, wormhole_eth_to_base
 from src.bridge.wormhole_queue import WormholeClaimQueue
 from src.treasury.manager import TreasuryManager
 from src.config_loader import load_bot_config, load_bridge_config, load_chains, load_tokens, token_decimals
-from src.execution.celo import CeloExecutor
+from src.execution.base import BaseExecutor
 from src.execution.executor import ArbExecutor, CycleRecord, CycleState
 from src.execution.solana import SolanaExecutor
 from src.execution.tx_log import log_platform_order, log_tx
@@ -84,10 +84,10 @@ async def _balances() -> dict[str, float]:
             _log(f"  VNX balance retry ({exc})")
             time.sleep(2)
 
-    celo = CeloExecutor(chains["celo"])
-    dec = token_decimals(token, "celo")
-    out["celo_usdt"] = float(to_human(celo.balance_erc20(chains["celo"].hub_token), 6))
-    out["celo_vchf"] = float(to_human(celo.balance_erc20(token.chains["celo"]), dec))
+    celo = BaseExecutor(chains["base"])
+    dec = token_decimals(token, "base")
+    out["base_usdc"] = float(to_human(celo.balance_erc20(chains["base"].hub_token), 6))
+    out["celo_vchf"] = float(to_human(celo.balance_erc20(token.chains["base"]), dec))
 
     sol = SolanaExecutor(chains["solana"])
     from spl.token.instructions import get_associated_token_address
@@ -138,12 +138,12 @@ async def route_order_for_balances(b: dict[str, float], *, dust: float) -> list[
     """Pick capital-efficient route order from current balances."""
     need_plat = b["platform_usdc"] < USDC_NEAR and b["platform_vchf"] < TEST_VCHF + VCHF_BUFFER
     sol_can_fund_plat = b["sol_usdc"] >= USDC_NEAR
-    celo_ready = b["celo_usdt"] >= USDT_NEAR
+    celo_ready = b["base_usdc"] >= USDT_NEAR
     if celo_ready and not (b["platform_vchf"] >= TEST_VCHF or b["platform_usdc"] >= USDC_NEAR):
-        return ["celo_to_solana", "solana_to_celo", "solana_to_vnx", "vnx_to_solana"]
+        return ["base_to_solana", "solana_to_base", "solana_to_vnx", "vnx_to_solana"]
     if need_plat and sol_can_fund_plat:
-        return ["solana_to_vnx", "vnx_to_solana", "solana_to_celo", "celo_to_solana"]
-    return ["vnx_to_solana", "solana_to_vnx", "solana_to_celo", "celo_to_solana"]
+        return ["solana_to_vnx", "vnx_to_solana", "solana_to_base", "base_to_solana"]
+    return ["vnx_to_solana", "solana_to_vnx", "solana_to_base", "base_to_solana"]
 
 
 def route_ready(direction: str, b: dict[str, float], *, dust: float) -> tuple[bool, str]:
@@ -151,21 +151,21 @@ def route_ready(direction: str, b: dict[str, float], *, dust: float) -> tuple[bo
     if direction == "vnx_to_solana":
         ok = b["platform_vchf"] >= TEST_VCHF or b["platform_usdc"] >= USDC_NEAR
         return ok, "platform VCHF or USDC"
-    if direction == "vnx_to_celo":
+    if direction == "vnx_to_base":
         ok = b["platform_vchf"] >= TEST_VCHF or b["platform_usdc"] >= USDC_NEAR
         return ok, "platform VCHF or USDC"
     if direction == "solana_to_vnx":
         ok = b["sol_usdc"] >= USDC_NEAR and b["celo_vchf"] <= dust and b["sol_vchf"] <= dust
         return ok, "Sol USDC (no on-chain VCHF)"
-    if direction == "celo_to_vnx":
-        ok = b["celo_usdt"] >= USDT_NEAR and b["celo_vchf"] <= dust
-        return ok, "Celo USDT (no on-chain VCHF)"
-    if direction == "solana_to_celo":
+    if direction == "base_to_vnx":
+        ok = b["base_usdc"] >= USDT_NEAR and b["celo_vchf"] <= dust
+        return ok, "Base USDT (no on-chain VCHF)"
+    if direction == "solana_to_base":
         ok = b["sol_usdc"] >= USDC_NEAR
         return ok, "Sol USDC"
-    if direction == "celo_to_solana":
-        ok = b["celo_usdt"] >= USDT_NEAR
-        return ok, "Celo USDT"
+    if direction == "base_to_solana":
+        ok = b["base_usdc"] >= USDT_NEAR
+        return ok, "Base USDT"
     return False, "unknown route"
 
 
@@ -177,13 +177,13 @@ async def audit() -> dict[str, float]:
     _log(
         f"Platform: USDC={b['platform_usdc']:.2f} VCHF={b['platform_vchf']:.2f} CHF={b['platform_chf']:.2f}"
     )
-    _log(f"Celo: USDT={b['celo_usdt']:.2f} VCHF={b['celo_vchf']:.2f}")
+    _log(f"Celo: USDT={b['base_usdc']:.2f} VCHF={b['celo_vchf']:.2f}")
     _log(f"Sol:  USDC={b['sol_usdc']:.2f} VCHF={b['sol_vchf']:.2f} SOL={b['sol_native']:.4f}")
     _log(f"ETH:  USDC={b['eth_usdc']:.2f} USDT={b['eth_usdt']:.2f} ETH={b['eth_native']:.4f}")
     _log("\n=== Targets (platform-centric) ===")
     _log(f"  Platform: USDC>={USDC_FOR_BUY} or VCHF>={TEST_VCHF + VCHF_BUFFER}")
     _log(f"  Sol:      USDC>={USDC_FOR_BUY} (no on-chain VCHF > {dust})")
-    _log(f"  Celo:     USDT>={USDT_FOR_BUY} (no on-chain VCHF > {dust})")
+    _log(f"  Base:     USDT>={USDT_FOR_BUY} (no on-chain VCHF > {dust})")
     if b["celo_vchf"] > dust or b["sol_vchf"] > dust:
         _log(
             f"WARN: on-chain VCHF celo={b['celo_vchf']:.2f} sol={b['sol_vchf']:.2f} "
@@ -250,7 +250,7 @@ async def _fund_chain_stable_via_vnx(
     execute: bool,
 ) -> bool:
     """
-    Fund Celo USDT or Sol USDC via vnx_to_* — withdraws platform VCHF, sells to stable on chain.
+    Fund Base USDT or Sol USDC via vnx_to_* — withdraws platform VCHF, sells to stable on chain.
     Ends with VCHF consolidated back on platform (no on-chain VCHF inventory).
     """
     direction = f"vnx_to_{chain}"
@@ -309,36 +309,36 @@ async def rebalance(execute: bool) -> bool:
                 _log(f"\nPLAN: ETH USDC → VNX ${move:.2f}")
             b = await _balances()
 
-        # Fund Celo USDT from ETH via Wormhole when Celo short and ETH has USDT
-        if b["celo_usdt"] < USDT_FOR_BUY * 0.5 and b["eth_usdt"] >= HUB_USDT + MIN_ETH_USDT:
+        # Fund Base USDT from ETH via Wormhole when Base short and ETH has USDT
+        if b["base_usdc"] < USDT_FOR_BUY * 0.5 and b["eth_usdt"] >= HUB_USDT + MIN_ETH_USDT:
             move = min(HUB_USDT, b["eth_usdt"] - MIN_ETH_USDT)
             if execute and move >= HUB_USDT * 0.9:
-                _log(f"\n--- Wormhole ETH→Celo ${move:.2f} USDT ---")
-                r = await wormhole_eth_to_celo(client, move)
+                _log(f"\n--- Wormhole ETH→Base ${move:.2f} USDT ---")
+                r = await wormhole_eth_to_base(client, move)
                 if not r["success"]:
                     _log(f"  FAIL eth→celo: {r.get('error')}")
                     ok = False
                 await step_wormhole_claim(max_rounds=40)
             elif move >= HUB_USDT * 0.9:
-                _log(f"\nPLAN: Wormhole ETH→Celo ${move:.2f} USDT")
+                _log(f"\nPLAN: Wormhole ETH→Base ${move:.2f} USDT")
             b = await _balances()
 
-        # Fund ETH USDT from Celo via Wormhole when platform/ETH need stables
+        # Fund ETH USDT from Base via Wormhole when platform/ETH need stables
         if (
             b["eth_usdt"] < MIN_ETH_USDT
-            and b["celo_usdt"] >= HUB_USDT + 5
+            and b["base_usdc"] >= HUB_USDT + 5
             and b["platform_usdc"] < USDC_NEAR
         ):
-            move = min(HUB_USDT, b["celo_usdt"] - 5)
+            move = min(HUB_USDT, b["base_usdc"] - 5)
             if execute and move >= HUB_USDT * 0.9:
-                _log(f"\n--- Wormhole Celo→ETH ${move:.2f} USDT ---")
-                r = await wormhole_celo_to_eth(client, move)
+                _log(f"\n--- Wormhole Base→ETH ${move:.2f} USDT ---")
+                r = await wormhole_base_to_eth(client, move)
                 if not r["success"]:
                     _log(f"  FAIL celo→eth: {r.get('error')}")
                     ok = False
                 await step_wormhole_claim(max_rounds=40)
             elif move >= HUB_USDT * 0.9:
-                _log(f"\nPLAN: Wormhole Celo→ETH ${move:.2f} USDT")
+                _log(f"\nPLAN: Wormhole Base→ETH ${move:.2f} USDT")
             b = await _balances()
 
         # Move excess ETH USDC to Sol (keep MIN_ETH_USDC on ETH)
@@ -376,15 +376,15 @@ async def rebalance(execute: bool) -> bool:
                 _log(f"\nPLAN: Platform buy VCHF (~{need_vchf_plat - b['platform_vchf']:.0f})")
             b = await _balances()
 
-        # Fund Celo USDT via vnx_to_celo (ends with USDT on Celo, VCHF back on platform)
-        if b["celo_usdt"] < USDT_FOR_BUY and b["platform_vchf"] >= TEST_VCHF:
+        # Fund Base USDT via vnx_to_base (ends with USDT on Base, VCHF back on platform)
+        if b["base_usdc"] < USDT_FOR_BUY and b["platform_vchf"] >= TEST_VCHF:
             if execute:
-                if not await _fund_chain_stable_via_vnx(client, treasury, executor, "celo", TEST_VCHF, True):
+                if not await _fund_chain_stable_via_vnx(client, treasury, executor, "base", TEST_VCHF, True):
                     ok = False
                 else:
                     time.sleep(30)
             else:
-                _log(f"\nPLAN: vnx_to_celo {TEST_VCHF} VCHF → Celo USDT")
+                _log(f"\nPLAN: vnx_to_base {TEST_VCHF} VCHF → Base USDT")
             b = await _balances()
 
         # Fund Sol USDC via vnx_to_solana

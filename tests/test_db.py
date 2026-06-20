@@ -7,7 +7,7 @@ from src.execution.executor import CycleRecord, CycleState
 def test_init_and_save_cycle(tmp_path, monkeypatch):
     monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
     init_db()
-    r = CycleRecord(id="t1", direction="celo_to_solana", size_vchf=10, state=CycleState.DONE)
+    r = CycleRecord(id="t1", direction="base_to_solana", size_vchf=10, state=CycleState.DONE)
     save_cycle(r)
     log_cycle_step("t1", "test", {"ok": True})
     rows = recent_cycles()

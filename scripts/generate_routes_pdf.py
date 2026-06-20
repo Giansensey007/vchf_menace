@@ -58,30 +58,30 @@ def _tex(s: str) -> str:
 
 
 ROUTE_STEPS: dict[str, list[str]] = {
-    "celo_to_solana": [
-        "Spend Celo USDT $\\rightarrow$ buy VCHF (Ubeswap)",
-        "Deposit VCHF to VNX (CELO, min 5 VCHF cumulative)",
+    "base_to_solana": [
+        "Spend Base USDT $\\rightarrow$ buy VCHF (Ubeswap)",
+        "Deposit VCHF to VNX (BASE, min 5 VCHF cumulative)",
         "Withdraw VCHF to Solana",
         "Sell VCHF for Sol USDC (Jupiter)",
-        "Wormhole USDT rebalance Celo $\\leftrightarrow$ Sol (stable leg)",
+        "Wormhole USDT rebalance Base $\\leftrightarrow$ Sol (stable leg)",
     ],
-    "solana_to_celo": [
+    "solana_to_base": [
         "Spend Sol USDC $\\rightarrow$ buy VCHF (Jupiter)",
         "Deposit VCHF to VNX (SOL, min 5 VCHF)",
-        "Withdraw VCHF to Celo",
-        "Sell VCHF for Celo USDT (Ubeswap)",
+        "Withdraw VCHF to Base",
+        "Sell VCHF for Base USDT (Ubeswap)",
         "Wormhole USDT rebalance",
     ],
-    "celo_to_vnx": [
-        "Spend Celo USDT $\\rightarrow$ buy VCHF on Celo",
-        "Deposit VCHF to VNX platform (CELO)",
+    "base_to_vnx": [
+        "Spend Base USDT $\\rightarrow$ buy VCHF on Base",
+        "Deposit VCHF to VNX platform (BASE)",
         "Platform sell VCHF for USDC",
         "Platform sell VCHF for USDC",
     ],
-    "vnx_to_celo": [
+    "vnx_to_base": [
         "Platform buy VCHF (min 40 VCHF order)",
-        "Withdraw VCHF to Celo",
-        "Sell VCHF for Celo USDT",
+        "Withdraw VCHF to Base",
+        "Sell VCHF for Base USDT",
     ],
     "solana_to_vnx": [
         "Spend Sol USDC $\\rightarrow$ buy VCHF (Jupiter)",
@@ -107,9 +107,9 @@ HUB_ROUTES = [
     ("vnx\\_to\\_eth", "VNX platform USDC $\\rightarrow$ ETH hot wallet withdraw"),
     ("cctp\\_sol\\_to\\_eth", "Sol USDC $\\rightarrow$ ETH USDC (Circle CCTP)"),
     ("cctp\\_eth\\_to\\_sol", "ETH USDC $\\rightarrow$ Sol USDC (Circle CCTP)"),
-    ("wormhole\\_celo\\_to\\_eth", "Celo USDT $\\rightarrow$ ETH USDT (Wormhole) + USDT$\\rightarrow$USDC swap"),
-    ("wormhole\\_eth\\_to\\_celo", "ETH USDT $\\rightarrow$ Celo USDT (Wormhole)"),
-    ("celo\\_usdt\\_to\\_vnx\\_usdc", "Celo USDT $\\rightarrow$ Wormhole $\\rightarrow$ ETH USDC $\\rightarrow$ VNX USDC"),
+    ("wormhole\\_celo\\_to\\_eth", "Base USDT $\\rightarrow$ ETH USDT (Wormhole) + USDT$\\rightarrow$USDC swap"),
+    ("wormhole\\_eth\\_to\\_celo", "ETH USDT $\\rightarrow$ Base USDT (Wormhole)"),
+    ("celo\\_usdt\\_to\\_vnx\\_usdc", "Base USDT $\\rightarrow$ Wormhole $\\rightarrow$ ETH USDC $\\rightarrow$ VNX USDC"),
 ]
 
 
@@ -183,7 +183,7 @@ def _build_latex(live_rows: list[dict] | None) -> str:
         rf"Trade size & {cfg.min_trade_vchf:.0f}--{cfg.max_trade_vchf:.0f} VCHF \\",
         rf"Min profit & \${cfg.min_profit_usd:.2f} round-trip \\",
         rf"VNX platform order min & {VNX_MIN_VCHF:.0f} VCHF \\",
-        rf"VNX deposit min (CELO/SOL VCHF) & 5 VCHF cumulative \\",
+        rf"VNX deposit min (BASE/SOL VCHF) & 5 VCHF cumulative \\",
         rf"VNX deposit min (ETH USDC) & {min_deposit_usdc('ETH'):.0f} USDC \\",
         rf"enable\_vnx\_cctp\_routes & {str(cfg.enable_vnx_cctp_routes).lower()} \\",
         rf"enable\_vnx\_arb\_routes & {str(cfg.enable_vnx_arb_routes).lower()} \\",
@@ -245,8 +245,8 @@ def _build_latex(live_rows: list[dict] | None) -> str:
             r"Origin & Primary & Return leg & Ends on \\",
             r"\midrule",
             r"\endhead",
-            (r"Celo USDT & celo\_to\_solana & solana\_to\_celo & Celo USDT \\"),
-            (r"Celo USDT & celo\_to\_vnx & vnx\_to\_celo & Celo USDT \\"),
+            (r"Base USDT & celo\_to\_solana & solana\_to\_celo & Base USDT \\"),
+            (r"Base USDT & celo\_to\_vnx & vnx\_to\_celo & Base USDT \\"),
             (r"Sol USDC & solana\_to\_vnx & vnx\_to\_solana & Sol USDC \\"),
             (r"Sol USDC & solana\_to\_celo & celo\_to\_solana & Sol USDC \\"),
             (r"Platform & vnx\_to\_celo & celo\_to\_vnx & Platform USDC \\"),

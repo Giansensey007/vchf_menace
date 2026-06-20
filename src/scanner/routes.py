@@ -4,22 +4,26 @@ from dataclasses import dataclass
 
 from src.config_loader import BotConfig, load_bot_config
 
-# Directed arb routes: buy VCHF on `buy`, sell VCHF on `sell`
+# Dual EVM hubs: Celo (USDT) + Base (USDC) alongside Sol/VNX — 10 directed routes.
 ROUTE_PAIRS: tuple[tuple[str, str], ...] = (
+    ("celo", "solana"),
+    ("solana", "celo"),
+    ("celo", "vnx"),
+    ("vnx", "celo"),
     ("base", "solana"),
     ("solana", "base"),
     ("base", "vnx"),
     ("vnx", "base"),
     ("solana", "vnx"),
     ("vnx", "solana"),
-    ("ethereum", "vnx"),
-    ("vnx", "ethereum"),
 )
 
+CELO_SOL_DIRECTIONS: tuple[str, ...] = ("celo_to_solana", "solana_to_celo")
 BASE_SOL_DIRECTIONS: tuple[str, ...] = ("base_to_solana", "solana_to_base")
 VNX_SOL_DIRECTIONS: tuple[str, ...] = ("solana_to_vnx", "vnx_to_solana")
+CELO_VNX_DIRECTIONS: tuple[str, ...] = ("celo_to_vnx", "vnx_to_celo")
 BASE_VNX_DIRECTIONS: tuple[str, ...] = ("base_to_vnx", "vnx_to_base")
-ETH_VNX_DIRECTIONS: tuple[str, ...] = ("ethereum_to_vnx", "vnx_to_ethereum")
+EVM_VNX_DIRECTIONS: tuple[str, ...] = CELO_VNX_DIRECTIONS + BASE_VNX_DIRECTIONS
 
 
 @dataclass(frozen=True)
@@ -33,26 +37,27 @@ class RouteSpec:
 
     @property
     def route_group(self) -> str:
+        if self.direction in CELO_SOL_DIRECTIONS:
+            return "celo_sol"
         if self.direction in BASE_SOL_DIRECTIONS:
             return "base_sol"
         if self.direction in VNX_SOL_DIRECTIONS:
             return "vnx_sol"
-        if self.direction in ETH_VNX_DIRECTIONS:
-            return "eth_vnx"
+        if self.direction in CELO_VNX_DIRECTIONS:
+            return "celo_vnx"
         return "base_vnx"
 
     @property
     def needs_vchf_bridge(self) -> bool:
         chains = {self.buy_chain, self.sell_chain}
-        return chains == {"base", "solana"} or "vnx" in chains
+        return chains in ({"celo", "solana"}, {"base", "solana"}) or "vnx" in chains
 
     @property
     def needs_stable_bridge(self) -> bool:
-        return {self.buy_chain, self.sell_chain} == {"base", "solana"}
+        return {self.buy_chain, self.sell_chain} in ({"celo", "solana"}, {"base", "solana"})
 
     @property
     def needs_cctp(self) -> bool:
-        """USDC settlement Sol ↔ ETH ↔ VNX platform via Circle CCTP."""
         return self.direction in VNX_SOL_DIRECTIONS
 
     @property
@@ -61,8 +66,7 @@ class RouteSpec:
 
     @property
     def needs_vnx_usdc(self) -> bool:
-        """Base↔vnx VCHF routes; USDC path is hub_eth.base_usdc_to_vnx_usdc (Wormhole+swap)."""
-        return self.direction in BASE_VNX_DIRECTIONS
+        return self.direction in EVM_VNX_DIRECTIONS
 
     @property
     def bridge_from(self) -> str | None:
@@ -82,7 +86,7 @@ class RouteSpec:
             return self.sell_chain
         if self.sell_chain == "vnx":
             return None
-        if {self.buy_chain, self.sell_chain} == {"base", "solana"}:
+        if {self.buy_chain, self.sell_chain} in ({"celo", "solana"}, {"base", "solana"}):
             return self.sell_chain
         return self.sell_chain
 
@@ -93,9 +97,10 @@ ALL_ROUTES: tuple[RouteSpec, ...] = tuple(
 
 ALL_DIRECTIONS: tuple[str, ...] = tuple(r.direction for r in ALL_ROUTES)
 
-# Six directed arb legs on Base / Sol / VNX (excludes ETH hub settlement pair).
 CORE_ARB_DIRECTIONS: tuple[str, ...] = (
+    *CELO_SOL_DIRECTIONS,
     *BASE_SOL_DIRECTIONS,
+    *CELO_VNX_DIRECTIONS,
     *BASE_VNX_DIRECTIONS,
     *VNX_SOL_DIRECTIONS,
 )
@@ -105,11 +110,13 @@ def active_routes(cfg: BotConfig | None = None) -> tuple[RouteSpec, ...]:
     cfg = cfg or load_bot_config()
     routes: list[RouteSpec] = []
     for r in ALL_ROUTES:
-        if r.route_group == "base_sol":
+        if r.route_group == "celo_sol":
+            routes.append(r)
+        elif r.route_group == "base_sol":
             routes.append(r)
         elif r.route_group == "vnx_sol" and cfg.enable_vnx_cctp_routes:
             routes.append(r)
-        elif r.route_group in ("base_vnx", "eth_vnx") and cfg.enable_vnx_arb_routes:
+        elif r.route_group in ("celo_vnx", "base_vnx") and cfg.enable_vnx_arb_routes:
             routes.append(r)
     return tuple(routes)
 
@@ -126,9 +133,10 @@ def route_for_direction(direction: str) -> RouteSpec | None:
 
 
 def estimate_fees_usd(buy_chain: str, sell_chain: str, cfg: BotConfig) -> float:
-    """Per-leg execution fees (CCTP is only on the USDC return path, not each VNX↔Sol leg)."""
     fees = 0.0
     direction = f"{buy_chain}_to_{sell_chain}"
+    if buy_chain == "celo" or sell_chain == "celo":
+        fees += cfg.celo_gas_usd_estimate * 2
     if buy_chain == "base" or sell_chain == "base":
         fees += cfg.base_gas_usd_estimate * 2
     if buy_chain == "ethereum" or sell_chain == "ethereum":
@@ -136,12 +144,12 @@ def estimate_fees_usd(buy_chain: str, sell_chain: str, cfg: BotConfig) -> float:
     if buy_chain == "solana" or sell_chain == "solana":
         fees += cfg.solana_fee_usd_estimate
     chains = {buy_chain, sell_chain}
-    if chains == {"base", "solana"}:
-        fees += cfg.vnx_bridge_fee_usd
-        fees += cfg.wormhole_bridge_fee_usd
+    if chains == {"celo", "solana"}:
+        fees += cfg.vnx_bridge_fee_usd + cfg.wormhole_bridge_fee_usd
+    elif chains == {"base", "solana"}:
+        fees += cfg.vnx_bridge_fee_usd + cfg.wormhole_bridge_fee_usd
     elif direction in VNX_SOL_DIRECTIONS:
-        fees += cfg.vnx_platform_fee_usd
-        fees += cfg.vnx_bridge_fee_usd
+        fees += cfg.vnx_platform_fee_usd + cfg.vnx_bridge_fee_usd
     elif "vnx" in chains:
         fees += cfg.vnx_platform_fee_usd
         if buy_chain != "vnx" and sell_chain != "vnx":
@@ -150,9 +158,7 @@ def estimate_fees_usd(buy_chain: str, sell_chain: str, cfg: BotConfig) -> float:
 
 
 def estimate_cctp_usdc_return_fees(cfg: BotConfig) -> float:
-    """Sol USDC → CCTP → ETH → VNX USDC deposit → platform VCHF buy."""
     return cfg.cctp_fee_usd + cfg.eth_gas_usd_estimate + cfg.vnx_platform_fee_usd
 
 
-# Synthetic closed-loop return (not a directed buy/sell route pair)
 CCTP_SOL_USDC_TO_VNX = "cctp_sol_usdc_to_vnx"

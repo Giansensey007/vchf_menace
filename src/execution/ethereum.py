@@ -8,7 +8,7 @@ from web3 import Web3
 
 from src.config_loader import ChainConfig, is_dry_run
 from src.execution.eth_rpc import connect_eth_web3
-from src.execution.celo import ERC20_ABI
+from src.execution.base import ERC20_ABI
 from src.quotes.addresses import checksum
 from src.quotes.sync_throttle import retry_backoff_sec, sync_throttle
 
@@ -160,6 +160,9 @@ def _load_eth_key() -> str:
     if pk:
         return pk
     pk = os.getenv("BASE_PRIVATE_KEY", "").strip()
+    if pk:
+        return pk
+    pk = os.getenv("CELO_PRIVATE_KEY", "").strip()
     if pk:
         return pk
     raise ValueError("ETH_PRIVATE_KEY or BASE_PRIVATE_KEY not set")

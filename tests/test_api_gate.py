@@ -39,6 +39,19 @@ async def test_api_sync_different_providers_independent():
 def test_provider_from_url():
     assert api_gate.provider_from_url("https://api.jup.ag/swap/v1/quote") == "jupiter"
     assert api_gate.provider_from_url("https://api.vnx.li/api/v1/quotes") == "vnx"
+    assert api_gate.provider_from_url("https://aggregator-api.kyberswap.com/celo/api/v1/routes") == "kyber"
     assert api_gate.provider_from_url("https://iris-api.circle.com/v1/fees") == "cctp"
     assert api_gate.provider_from_url("https://forno.celo.org") == "celo_rpc"
+    assert api_gate.provider_from_url("https://api.mainnet-beta.solana.com") == "solana_rpc"
     assert api_gate.provider_from_url("https://example.com") == "default"
+
+
+def test_solana_rpc_default_interval_ms(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("SOL_RPC_MIN_INTERVAL_MS", raising=False)
+    monkeypatch.delenv("API_SYNC_SOLANA_RPC_MS", raising=False)
+    assert api_gate._sync_ms("solana_rpc") >= 800.0
+
+
+def test_kyber_default_interval_ms(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("API_SYNC_KYBER_MS", raising=False)
+    assert api_gate._sync_ms("kyber") >= 600.0

@@ -13,14 +13,15 @@ from typing import Any
 import httpx
 
 from src.bridge.wormhole_vaa import fetch_signed_vaa, fetch_vaa_by_tx_hash, token_bridge_emitter
-from src.config_loader import ROOT, is_dry_run, load_bridge_config, load_chains
+from src.config_loader import data_dir, is_dry_run, load_bridge_config, load_chains
 from src.execution.base import BaseExecutor
 from src.execution.ethereum import EthereumExecutor
 from src.execution.tx_log import log_tx
 
 logger = logging.getLogger(__name__)
 
-QUEUE_PATH = ROOT / "data" / "wormhole_queue.json"
+def wormhole_queue_path() -> Path:
+    return data_dir() / "wormhole_queue.json"
 
 
 class WormholeQueueStatus(str, Enum):
@@ -71,7 +72,7 @@ class WormholeClaimQueue:
     """Track Wormhole Portal initiates awaiting VAA + completeTransfer on destination."""
 
     def __init__(self, path: Path | None = None) -> None:
-        self.path = path or QUEUE_PATH
+        self.path = path or wormhole_queue_path()
         self.cfg = load_bridge_config()["wormhole"]
         self._store = self.load()
 

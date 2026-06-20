@@ -21,7 +21,8 @@ _DEFAULT_SYNC_MS: dict[str, float] = {
     "vnx": 1200.0,
     "cctp": 1000.0,
     "celo_rpc": 400.0,
-    "solana_rpc": 250.0,
+    "kyber": 600.0,
+    "solana_rpc": 800.0,
     "eth_rpc": 250.0,
     "blockscout": 1000.0,
     "default": 600.0,
@@ -32,6 +33,11 @@ _last_call_mono: dict[str, float] = {}
 
 
 def _sync_ms(provider: str) -> float:
+    if provider == "solana_rpc":
+        raw = os.getenv("SOL_RPC_MIN_INTERVAL_MS") or os.getenv(
+            "API_SYNC_SOLANA_RPC_MS", str(_DEFAULT_SYNC_MS["solana_rpc"])
+        )
+        return float(raw)
     key = f"API_SYNC_{provider.upper()}_MS"
     if provider == "jupiter" and key not in os.environ:
         default = _jupiter_default_ms()
@@ -46,6 +52,8 @@ def provider_from_url(url: str) -> str:
         return "jupiter"
     if "vnx.li" in host:
         return "vnx"
+    if "kyberswap" in host or "kyber" in host:
+        return "kyber"
     if "circle.com" in host or "iris-api" in host:
         return "cctp"
     if "celo" in host or "forno" in host:

@@ -10,6 +10,7 @@ from src.bridge.hub_usdt import (
     normalize_hub_to_usdt,
     usdc_raw_for_solana_buy,
     usdt_raw_for_base_buy,
+    usdt_raw_for_celo_buy,
 )
 from src.quotes.router import buy_token_with_stable, sell_token_for_stable
 from src.quotes.sanity import check_stable_peg, check_vchf_usd_rate
@@ -348,8 +349,8 @@ async def simulate_route(
     sell_dec = token_decimals(token, sell_key)
     notes: list[str] = []
 
-    def _is_base_sol_route(bk: str, sk: str) -> bool:
-        return {bk, sk} == {"base", "solana"}
+    def _is_evm_sol_route(bk: str, sk: str) -> bool:
+        return {bk, sk} in ({"celo", "solana"}, {"base", "solana"})
 
     vchf_sell_amt = from_human(size_vchf, sell_dec)
     sell_q = await sell_token_for_stable(client, sell_chain, token, sell_key, vchf_sell_amt)
@@ -369,15 +370,17 @@ async def simulate_route(
         )
 
     stable_out = float(to_human(sell_q.amount_out, sell_chain.hub_decimals))
-    if _is_base_sol_route(buy_key, sell_key):
+    if _is_evm_sol_route(buy_key, sell_key):
         stable_out = await normalize_hub_to_usdt(client, sell_key, sell_chain, sell_q.amount_out)
 
     ok_rate, rate_msg = check_vchf_usd_rate(stable_out, size_vchf, cfg)
     if not ok_rate:
         notes.append(rate_msg)
 
-    if _is_base_sol_route(buy_key, sell_key):
-        if buy_key == "base":
+    if _is_evm_sol_route(buy_key, sell_key):
+        if buy_key == "celo":
+            stable_in_raw = usdt_raw_for_celo_buy(stable_out)
+        elif buy_key == "base":
             stable_in_raw = usdt_raw_for_base_buy(stable_out)
         else:
             usdc_raw, conv_err = await usdc_raw_for_solana_buy(client, stable_out)
@@ -403,7 +406,7 @@ async def simulate_route(
         )
 
     vchf_bought = float(to_human(buy_q.amount_out, buy_dec))
-    if _is_base_sol_route(buy_key, sell_key):
+    if _is_evm_sol_route(buy_key, sell_key):
         stable_in = await normalize_hub_to_usdt(client, buy_key, buy_chain, stable_in_raw)
     else:
         stable_in = float(to_human(stable_in_raw, buy_chain.hub_decimals))

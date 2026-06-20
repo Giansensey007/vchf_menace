@@ -3,19 +3,19 @@
 production:
   platform_vchf: 200
   platform_usdc: 250
-  celo_usdt: 250
+  base_usdc: 250
   sol_usdc: 250
   eth_native: 0.015
   eth_usdc: 50
   eth_usdt: 50
-  celo_native: 0.5
+  base_native: 0.5
   sol_native: 0.05
 
 # Minimum to run a single 31 VCHF route test (scripts/rebalance_for_test.py)
 route_test:
   platform_vchf: 32
   platform_usdc: 45
-  celo_usdt: 45
+  base_usdc: 45
   sol_usdc: 45
   eth_usdc: 3
   eth_usdt: 5

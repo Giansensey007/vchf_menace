@@ -23,6 +23,7 @@ def _bot_cfg(**overrides) -> BotConfig:
         peg_max=1.02,
         vnx_bridge_poll_sec=1,
         vnx_bridge_timeout_sec=5,
+        celo_gas_usd_estimate=0.25,
         base_gas_usd_estimate=0.25,
         solana_fee_usd_estimate=0.05,
         vnx_bridge_fee_usd=1.0,
@@ -56,7 +57,7 @@ def _profitable_sim(direction: str, **overrides) -> CycleSimulation:
 
 
 def test_cycle_record_failed():
-    r = CycleRecord(id="abc", direction="celo_to_solana", size_vchf=10)
+    r = CycleRecord(id="abc", direction="base_to_solana", size_vchf=10)
     r.state = CycleState.FAILED
     r.error = "not profitable"
     assert r.state == CycleState.FAILED
@@ -87,15 +88,15 @@ async def test_run_cycle_blocks_disabled_vnx_arb():
     chains = load_chains()
     token = load_tokens()["VCHF"]
     ex = ArbExecutor(chains, token, cfg)
-    sim = _profitable_sim("celo_to_vnx")
+    sim = _profitable_sim("base_to_vnx")
 
     with patch("src.execution.executor.simulate_direction", new_callable=AsyncMock, return_value=sim):
         with patch("src.execution.executor.save_cycle"):
             with patch("src.execution.executor.log_cycle_step"):
-                rec = await ex.run_cycle(AsyncMock(), "celo_to_vnx", 500)
+                rec = await ex.run_cycle(AsyncMock(), "base_to_vnx", 500)
 
     assert rec.state == CycleState.FAILED
-    assert "celo↔vnx disabled" in (rec.error or "")
+    assert "base↔vnx disabled" in (rec.error or "")
 
 
 @pytest.mark.asyncio
@@ -242,8 +243,8 @@ async def test_vnx_to_chain_fails_on_sell():
     chains = load_chains()
     token = load_tokens()["VCHF"]
     ex = ArbExecutor(chains, token, cfg)
-    record = CycleRecord(id="t4", direction="vnx_to_celo", size_vchf=500)
-    sim = _profitable_sim("vnx_to_celo", buy_chain="vnx", sell_chain="celo")
+    record = CycleRecord(id="t4", direction="vnx_to_base", size_vchf=500)
+    sim = _profitable_sim("vnx_to_base", buy_chain="vnx", sell_chain="base")
 
     mock_bridge = AsyncMock()
     mock_bridge.bridge_vchf = AsyncMock(
@@ -260,14 +261,14 @@ async def test_vnx_to_chain_fails_on_sell():
 
     with patch("src.execution.executor.platform_buy_vchf", new=mock_buy):
         with patch("src.execution.executor.VnxBridge", return_value=mock_bridge):
-            with patch("src.execution.executor.CeloExecutor", return_value=mock_celo):
+            with patch("src.execution.executor.BaseExecutor", return_value=mock_celo):
                 with patch("src.execution.executor.VnxClient") as mock_vnx_cls:
                     vnx_inst = AsyncMock()
                     mock_vnx_cls.return_value.__aenter__.return_value = vnx_inst
                     vnx_inst.account_balance = AsyncMock(return_value={"balances": []})
                     vnx_inst.vchf_balance = MagicMock(return_value=0.0)
                     with patch("src.execution.executor.log_cycle_step"):
-                        await ex._exec_vnx_to_chain(AsyncMock(), record, sim, "celo")
+                        await ex._exec_vnx_to_chain(AsyncMock(), record, sim, "base")
 
     assert record.state == CycleState.FAILED
-    assert "celo sell VCHF failed" in (record.error or "")
+    assert "base sell VCHF failed" in (record.error or "")

@@ -13,6 +13,7 @@ _DEFAULT_MS: dict[str, float] = {
     "vnx": 1200.0,
     "cctp": 1000.0,
     "celo_rpc": 400.0,
+    "kyber": 600.0,
     "solana_rpc": 800.0,
     "eth_rpc": 250.0,
     "blockscout": 1000.0,

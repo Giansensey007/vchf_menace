@@ -14,8 +14,8 @@ def test_peg_and_vchf_rate():
 
 def test_sanity_check_simulation_ok():
     sim = CycleSimulation(
-        direction="celo_to_vnx",
-        buy_chain="celo",
+        direction="base_to_vnx",
+        buy_chain="base",
         sell_chain="vnx",
         size_vchf=50,
         stable_in_usd=67.5,

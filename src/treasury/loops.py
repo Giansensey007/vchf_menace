@@ -5,25 +5,34 @@ from __future__ import annotations
 INVERSE_DIRECTION: dict[str, str] = {
     "celo_to_vnx": "vnx_to_celo",
     "vnx_to_celo": "celo_to_vnx",
+    "base_to_vnx": "vnx_to_base",
+    "vnx_to_base": "base_to_vnx",
     "solana_to_vnx": "vnx_to_solana",
     "vnx_to_solana": "solana_to_vnx",
     "celo_to_solana": "solana_to_celo",
     "solana_to_celo": "celo_to_solana",
+    "base_to_solana": "solana_to_base",
+    "solana_to_base": "base_to_solana",
 }
 
 # Where stablecoin lands after a successful one-way leg (chain_key, stable name)
 LEG_END_STABLE: dict[str, tuple[str, str]] = {
     "celo_to_vnx": ("vnx", "usdc"),
     "vnx_to_celo": ("celo", "usdt"),
+    "base_to_vnx": ("vnx", "usdc"),
+    "vnx_to_base": ("base", "usdc"),
     "solana_to_vnx": ("vnx", "usdc"),
     "vnx_to_solana": ("solana", "usdc"),
     "celo_to_solana": ("solana", "usdc"),
     "solana_to_celo": ("celo", "usdt"),
+    "base_to_solana": ("solana", "usdc"),
+    "solana_to_base": ("base", "usdc"),
 }
 
 # Chains that spend their hub stable on the buy leg
 ORIGIN_BUY_CHAIN: dict[str, str] = {
     "celo": "celo",
+    "base": "base",
     "solana": "solana",
     "vnx": "vnx",
 }
@@ -31,8 +40,9 @@ ORIGIN_BUY_CHAIN: dict[str, str] = {
 # Profitable one-way legs that start by spending stable on `origin`
 DIRECTIONS_FROM_ORIGIN: dict[str, tuple[str, ...]] = {
     "celo": ("celo_to_vnx", "celo_to_solana"),
-    "solana": ("solana_to_vnx", "solana_to_celo"),
-    "vnx": ("vnx_to_celo", "vnx_to_solana"),
+    "base": ("base_to_vnx", "base_to_solana"),
+    "solana": ("solana_to_vnx", "solana_to_celo", "solana_to_base"),
+    "vnx": ("vnx_to_celo", "vnx_to_base", "vnx_to_solana"),
 }
 
 

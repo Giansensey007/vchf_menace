@@ -6,7 +6,7 @@ Usage:
   python scripts/test_probe_trades.py              # quotes + dry-run only
   python scripts/test_probe_trades.py --execute  # live swaps (set DRY_RUN=false)
 
-VNX on-chain deposit credit min is 5 VCHF (CELO/SOL cumulative). Platform buy/sell min is 30 VCHF.
+VNX on-chain deposit credit min is 5 VCHF (BASE/SOL cumulative). Platform buy/sell min is 30 VCHF.
 """
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ from dotenv import load_dotenv
 load_dotenv(ROOT / ".env")
 
 from src.config_loader import is_dry_run, load_bot_config, load_chains, load_tokens, token_decimals
-from src.execution.celo import CeloExecutor
+from src.execution.base import BaseExecutor
 from src.execution.executor import ArbExecutor
 from src.execution.solana import SolanaExecutor
 from src.quotes.http_client import build_client
@@ -36,7 +36,7 @@ from src.vnx.trading import VCHF_MIN_ORDER
 
 PROBE_VCHF = 5.0
 PROBE_STABLE_USD = 5.0
-VNX_DEPOSIT_MIN_VCHF = min(min_deposit_vchf("CELO"), min_deposit_vchf("SOL"))
+VNX_DEPOSIT_MIN_VCHF = min(min_deposit_vchf("BASE"), min_deposit_vchf("SOL"))
 
 
 def print_funding_guide(celo_addr: str, sol_addr: str) -> None:
@@ -48,8 +48,8 @@ def print_funding_guide(celo_addr: str, sol_addr: str) -> None:
 ┌─────────────────┬──────────────────────────────────────────────────────────┐
 │ Wallet / Platform│ Fund with (minimum for probes)                          │
 ├─────────────────┼──────────────────────────────────────────────────────────┤
-│ Celo hot wallet │ ~15 USDT  (5 for buy probe + 5 buffer + gas in CELO)    │
-│                 │ ~0.05 CELO native for gas                                 │
+│ Base hot wallet │ ~15 USDT  (5 for buy probe + 5 buffer + gas in BASE)    │
+│                 │ ~0.05 BASE native for gas                                 │
 │                 │ Optional: 5 VCHF on-wallet if testing sell-only first     │
 │                 │ Address: {celo}                                           │
 ├─────────────────┼──────────────────────────────────────────────────────────┤
@@ -65,8 +65,8 @@ def print_funding_guide(celo_addr: str, sol_addr: str) -> None:
 └─────────────────┴──────────────────────────────────────────────────────────┘
 
 Test phases (this script):
-  1. Quote 5 VCHF buy/sell on Celo (USDT) and Solana (USDC)
-  2. Simulate full celo↔sol routes at 5 VCHF (expect loss; bridge dry-run only)
+  1. Quote 5 VCHF buy/sell on Base (USDT) and Solana (USDC)
+  2. Simulate full base↔sol routes at 5 VCHF (expect loss; bridge dry-run only)
   3. With --execute: broadcast single-chain swap legs only (~5 VCHF / ~$5)
 
 Do NOT fund Ethereum USDC for VNX — platform USDC arb routes are off.
@@ -111,15 +111,15 @@ async def execute_swap_leg(chain_key: str, side: str, vchf: float) -> str | None
     cfg = load_bot_config()
     dec = token_decimals(token, chain_key)
 
-    if chain_key == "celo":
-        ex = CeloExecutor(chains["celo"])
+    if chain_key == "base":
+        ex = BaseExecutor(chains["base"])
         if side == "buy":
-            usdt = from_human(PROBE_STABLE_USD, chains["celo"].hub_decimals)
+            usdt = from_human(PROBE_STABLE_USD, chains["base"].hub_decimals)
             min_out = int(vchf * 0.97 * 10**dec)
-            return ex.swap_exact_input(chains["celo"].hub_token, token.chains["celo"], usdt, min_out)
+            return ex.swap_exact_input(chains["base"].hub_token, token.chains["base"], usdt, min_out)
         vchf_raw = from_human(vchf, dec)
-        min_usdt = int(PROBE_STABLE_USD * 0.97 * 10**chains["celo"].hub_decimals)
-        return ex.swap_exact_input(token.chains["celo"], chains["celo"].hub_token, vchf_raw, min_usdt)
+        min_usdt = int(PROBE_STABLE_USD * 0.97 * 10**chains["base"].hub_decimals)
+        return ex.swap_exact_input(token.chains["base"], chains["base"].hub_token, vchf_raw, min_usdt)
 
     ex = SolanaExecutor(chains["solana"])
     async with build_client() as client:
@@ -145,7 +145,7 @@ async def main() -> None:
 
     celo_addr = sol_addr = ""
     try:
-        celo_addr = CeloExecutor(load_chains()["celo"]).address
+        celo_addr = BaseExecutor(load_chains()["base"]).address
     except Exception:
         pass
     try:
@@ -161,14 +161,14 @@ async def main() -> None:
 
     print("\n--- Live quotes @ 5 VCHF / $5 stable ---")
     async with build_client() as client:
-        for chain_key in ("celo", "solana"):
+        for chain_key in ("base", "solana"):
             ok, msg = await quote_leg(client, chain_key, "buy", PROBE_VCHF)
             print(f"  {'OK' if ok else 'FAIL'}: {msg}")
             ok, msg = await quote_leg(client, chain_key, "sell", PROBE_VCHF)
             print(f"  {'OK' if ok else 'FAIL'}: {msg}")
 
         print("\n--- Route simulation @ 5 VCHF (loss OK; bridge dry-run below VNX min) ---")
-        for direction in ("celo_to_solana", "solana_to_celo"):
+        for direction in ("base_to_solana", "solana_to_base"):
             sim = await simulate_direction(client, chains, token, cfg, direction, PROBE_VCHF)
             print(
                 f"  {direction}: in=${sim.stable_in_usd:.2f} out=${sim.stable_out_usd:.2f} "
@@ -178,8 +178,8 @@ async def main() -> None:
     if args.execute:
         print("\n--- Executing single-chain swap probes ---")
         for chain_key, side in (
-            ("celo", "buy"),
-            ("celo", "sell"),
+            ("base", "buy"),
+            ("base", "sell"),
             ("solana", "buy"),
             ("solana", "sell"),
         ):
@@ -195,7 +195,7 @@ async def main() -> None:
         else:
             ex = ArbExecutor(chains, token, cfg)
             async with build_client() as client:
-                for d in ("celo_to_solana", "solana_to_celo"):
+                for d in ("base_to_solana", "solana_to_base"):
                     rec = await ex.run_cycle(client, d, PROBE_VCHF)
                     print(f"  {d}: state={rec.state.value} error={rec.error}")
     else:
