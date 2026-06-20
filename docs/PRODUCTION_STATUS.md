@@ -57,7 +57,28 @@ Stale pending records >48h are auto-failed at `verify-all` startup.
 |--------|--------|
 | Command | `DRY_RUN=true python -m pytest tests/ -q` |
 | Pass / fail | **192 passed**, 0 failed |
-| 10-iteration sanity | pytest every iter; audit every iter; verify-all on even iters (see table below) |
+| 10-iteration sanity | pytest every iter; audit every iter; verify-all on even iters (see tables below) |
+
+### 10-iteration validation — round 2 (2026-06-20)
+
+Command pattern per iteration: `pytest tests/ -q` → `execute_route_matrix.py --step audit` → (`verify-all` on even iters).  
+Runner: `python scripts/run_production_sanity_10.py` · Results: `validation/production-sanity-10.json`
+
+| Iter | pytest | audit | verify-all | Notes |
+|------|--------|-------|------------|-------|
+| 1 | PASS (192) | PASS | — | |
+| 2 | PASS (192) | PASS | PASS | Critical checks PASS; probes SKIP (funding) |
+| 3 | PASS (192) | PASS | — | |
+| 4 | PASS (192) | PASS | PASS | Stable |
+| 5 | PASS (192) | PASS | — | |
+| 6 | PASS (192) | PASS | PASS | Initial fail: `route_simulations` VNX 400; fixed quote retry |
+| 7 | PASS (192) | PASS | — | |
+| 8 | PASS (192) | PASS | PASS | Stable |
+| 9 | PASS (192) | PASS | — | |
+| 10 | PASS (192) | PASS | PASS | Re-verified after retry fix |
+
+**Final state (iter 10):** **192 passed** · audit OK · verify-all critical PASS · on-chain probes SKIP (funding).  
+Fixes this pass: `format_audit_block` on in-flight ledger, dual-hub `reconcile(base_token=…)`, audit skips Base when `BASE_PRIVATE_KEY` unset, route-sim quote retry on VNX 400.
 
 ### 10-iteration validation — round 4 (2026-06-20)
 

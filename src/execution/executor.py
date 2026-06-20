@@ -389,7 +389,6 @@ class ArbExecutor:
                 return
             record.tx_hashes.append(tx1)
             log_cycle_step(record.id, "celo_buy_vchf", {"tx": tx1})
-            import time
 
             for _ in range(20):
                 on_chain = float(to_human(celo_exec.balance_erc20(self.token.chains["celo"]), celo_dec))
