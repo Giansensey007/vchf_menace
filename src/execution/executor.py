@@ -362,7 +362,13 @@ class ArbExecutor:
         target = record.size_vchf
 
         on_chain = float(to_human(celo_exec.balance_erc20(self.token.chains["celo"]), celo_dec))
-        if self._may_reuse_on_chain_vchf() and on_chain >= target * 0.99:
+        from src.vnx.deposits import min_deposit_vchf
+
+        celo_dep_min = min_deposit_vchf(os.getenv("VNX_CELO_BLOCKCHAIN", "CELO"))
+        if on_chain >= max(target * 0.99, celo_dep_min * 0.99):
+            vchf_amt = min(on_chain, target)
+            logger.info("Celo already has %.2f VCHF — skip buy (bridge inventory)", on_chain)
+        elif self._may_reuse_on_chain_vchf() and on_chain >= target * 0.99:
             vchf_amt = min(on_chain, target)
             logger.info("Celo already has %.2f VCHF — skip buy", on_chain)
         else:

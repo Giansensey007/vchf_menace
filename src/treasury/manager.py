@@ -340,13 +340,18 @@ class TreasuryManager:
                 notes.append(f"consolidated {consolidated:.2f} VCHF to platform")
 
         snap = await self.snapshot()
+        celo_dep_min = min_deposit_vchf(os.getenv("VNX_CELO_BLOCKCHAIN", "CELO"))
+        sol_dep_min = min_deposit_vchf(os.getenv("VNX_SOL_BLOCKCHAIN", "SOL"))
+        bridge_inventory_ok = (
+            direction == "celo_to_solana" and snap.celo_vchf >= celo_dep_min * 0.99
+        ) or (direction == "solana_to_celo" and snap.sol_vchf >= sol_dep_min * 0.99)
 
         for p in self._ledger.pending_vnx_withdraws():
             notes.append(
                 f"{p.quantity:.2f} VCHF pending {p.blockchain} withdraw since {p.created_at[:19]}"
             )
 
-        if self._platform_vchf_only():
+        if self._platform_vchf_only() and not bridge_inventory_ok:
             ok, msg = await self.assert_vchf_home_policy()
             if not ok:
                 notes.append(msg)
@@ -392,13 +397,16 @@ class TreasuryManager:
                 notes.append(f"will buy {size_vchf:.0f} VCHF on platform (order minimum)")
 
         if direction in ("celo_to_vnx", "celo_to_solana"):
-            need_usdt = size_vchf * 1.35
-            if snap.celo_usdt < need_usdt * 0.9:
-                notes.append(
-                    f"Celo needs ≥{need_usdt:.0f} USDT (have {snap.celo_usdt:.1f}) — "
-                    "fund via vnx_to_celo or wormhole"
-                )
-                return PrepareResult(False, direction, size_vchf, notes, consolidated)
+            if bridge_inventory_ok:
+                notes.append(f"reuse {snap.celo_vchf:.2f} VCHF on Celo for bridge")
+            else:
+                need_usdt = size_vchf * 1.35
+                if snap.celo_usdt < need_usdt * 0.9:
+                    notes.append(
+                        f"Celo needs ≥{need_usdt:.0f} USDT (have {snap.celo_usdt:.1f}) — "
+                        "fund via vnx_to_celo or wormhole"
+                    )
+                    return PrepareResult(False, direction, size_vchf, notes, consolidated)
 
         if direction in ("solana_to_vnx", "solana_to_celo"):
             need_usdc = size_vchf * 1.35

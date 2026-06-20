@@ -59,14 +59,14 @@ Stale pending records >48h are auto-failed at `verify-all` startup.
 | Pass / fail | **192 passed**, 0 failed |
 | 10-iteration sanity | pytest every iter; audit every iter; verify-all on even iters (see table below) |
 
-### 10-iteration validation — round 3 (2026-06-20)
+### 10-iteration validation — round 4 (2026-06-20)
 
 Command pattern per iteration: `pytest tests/ -q` → `execute_route_matrix.py --step audit` → (`verify-all` on even iters).
 
 | Iter | pytest | audit | verify-all |
 |------|--------|-------|------------|
 | 1 | PASS (192) | PASS | — |
-| 2 | PASS (192) | PASS | FAIL† |
+| 2 | PASS (192) | PASS | PASS |
 | 3 | PASS (192) | PASS | — |
 | 4 | PASS (192) | PASS | PASS |
 | 5 | PASS (192) | PASS | — |
@@ -76,19 +76,12 @@ Command pattern per iteration: `pytest tests/ -q` → `execute_route_matrix.py -
 | 9 | PASS (192) | PASS | — |
 | 10 | PASS (192) | PASS | PASS |
 
-† Iter 2 `route_simulations` flake (Jupiter/RPC rate limit); iters 4/6/8/10 critical verify-all PASS.
+**Result:** 10/10 PASS · all 10 dual-hub routes quote @ 31 VCHF · critical `verify-all` checks PASS on all 5 verify runs. On-chain probes SKIP (under-funded).  
+Results: `validation/production-sanity-10-round4.json`
 
-**Result:** 10/10 pytest · 10/10 audit · 4/5 verify-all (critical checks PASS on stable runs).  
-Results: `validation/production-sanity-10.json`
+Audit skips Base balance lines when `BASE_PRIVATE_KEY` unset; Celo/Base/Sol/ETH lines print when keys present.
 
-### Prior 10-iteration sweep (round 2)
-
-| Iter | pytest | audit | verify-all | Notes |
-|------|--------|-------|------------|-------|
-| 1–4 | mixed | mixed | mixed | Early `format_audit_block` / env flakes (fixed) |
-| 5–10 | PASS (171→192) | PASS | PASS on even iters | Stable after dual-hub hardening |
-
-Validated in unit tests: **30 VCHF** platform min, **in_flight** dual-hub baselines (Celo+Base), **VNX collision** retry, **Sol RPC** throttle, **infinite approvals** (`token_approvals.py`), **zero-swap guards**, **`--size`** on route matrix (default 31 VCHF).
+Validated: **30 VCHF** platform min, **in_flight** dual-hub baselines (Celo+Base), **VNX collision** retry, **Sol RPC** throttle, **zero-swap guards**, **`--size`** flag (default 31 VCHF).
 
 ## Route matrix (`verify-all`)
 
@@ -102,23 +95,23 @@ Command: `DRY_RUN=true python scripts/execute_route_matrix.py --step verify-all`
 | `wormhole_claim` | PASS | Queue empty |
 | `wormhole_preflight` | PASS | Base→Sol/ETH OK |
 | `route_simulations` | PASS | All 10 directions quote @ 31 VCHF |
-| `base_swaps` | PASS | DRY_RUN Kyber/Uniswap buy/sell probes on Base |
-| `celo_swaps` | PASS | DRY_RUN legacy Celo buy/sell probes |
+| `celo_swaps` | SKIP | Celo USDT 6.18 — below probe threshold in DRY_RUN |
+| `base_swaps` | SKIP | Base USDC 0.00 — fund for on-chain probes |
 
 ### Route simulations @ 31 VCHF (quotes only)
 
 | Direction | Active | Net @ 31 VCHF |
 |-----------|--------|---------------|
-| `celo_to_solana` | yes | quotes OK (legacy Celo hub) |
-| `solana_to_celo` | yes | quotes OK (legacy Celo hub) |
-| `celo_to_vnx` | yes | quotes OK |
-| `vnx_to_celo` | yes | quotes OK |
+| `celo_to_solana` | yes | ~-$2.05 |
+| `solana_to_celo` | yes | ~-$2.05 |
+| `celo_to_vnx` | yes | ~-$1.67 |
+| `vnx_to_celo` | yes | ~-$0.53 |
 | `base_to_solana` | yes | ~-$2.05 |
-| `solana_to_base` | yes | ~-$2.06 |
-| `base_to_vnx` | yes | ~-$1.70 |
-| `vnx_to_base` | yes | ~-$0.50 |
-| `solana_to_vnx` | yes | ~-$1.67 |
-| `vnx_to_solana` | yes | ~-$1.63 |
+| `solana_to_base` | yes | ~-$2.05 |
+| `base_to_vnx` | yes | ~-$1.09 |
+| `vnx_to_base` | yes | ~-$1.11 |
+| `solana_to_vnx` | yes | ~-$1.64 |
+| `vnx_to_solana` | yes | ~-$1.66 |
 
 Negative net at test size is expected (fees + spread); deploy sizing 200–2000 VCHF.
 
@@ -143,7 +136,8 @@ CCTP return path (`cctp_sol_usdc_to_vnx`) implemented in `ArbExecutor.run_cctp_u
 |-------|------|--------|-----|
 | VNX VCHF | 1.35 | 200 | +198.65 |
 | VNX USDC | 11.62 | 250 | +238.38 |
-| Celo USDT | **12.98** | 250 | +237.02 (stranded — return via Wormhole Celo→ETH or route test) |
+| Celo USDT | 6.18 | 250 | +243.82 |
+| Celo VCHF | 5.40 | — | on-chain (above 5 min deposit) |
 | Base USDC | 0.00 | 250 | +250.00 |
 | Sol USDC | 0.23 | 250 | +249.77 |
 | ETH USDC | 0.30 | 50 | +49.70 |
@@ -158,7 +152,7 @@ CCTP return path (`cctp_sol_usdc_to_vnx`) implemented in `ArbExecutor.run_cctp_u
 |-------|------|--------|-----|
 | VNX VCHF | 1.35 | 32 | +30.65 |
 | VNX USDC | 11.62 | 45 | +33.38 |
-| Celo USDT | 12.98 | 45 | OK for probes |
+| Celo USDT | 6.18 | 45 | +38.82 |
 | Base USDC | 0.00 | 45 | +45.00 |
 | Sol USDC | 0.23 | 45 | +44.77 |
 | ETH USDC | 0.30 | 3 | +2.70 |
@@ -220,8 +214,7 @@ Treasury `close_loop_always_return` + `consolidate_vchf_to_platform()` sweep idl
 2. **VNX API** — `queryWithdrawals` / `queryTransfers` return HTTP 403 (in-flight ledger + balance polling still work)
 3. **Paid Solana RPC** — public endpoint hits 429 during CCTP discover; set `RPC_SOLANA` to Helius/QuickNode for prod
 4. **Jupiter API key** — optional but reduces 429 on route sims (`JUPITER_API_KEY`)
-5. **Stranded Celo USDT** — **12.98 USDT** on Celo hot wallet (from prior route tests); return via Wormhole Celo→ETH or consume in `celo_to_*` probes — not recovered automatically in `DRY_RUN`
-6. **On-chain probes** — re-run `verify-all` after funding; set `DRY_RUN=false` only when critical probes PASS
+5. **On-chain probes** — re-run `verify-all` after funding; set `DRY_RUN=false` only when critical probes PASS
 
 ## Go-live checklist
 

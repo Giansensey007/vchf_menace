@@ -215,11 +215,27 @@ class VnxBridge:
                     direction, withdraw_qty, "", dest_label, None, txids, False, True
                 )
 
-            dep = await vnx.deposit_address("VCHF", source_blockchain)
-            deposit_address = dep.get("address") or ""
+            deposit_address = ""
+            dep_err_msg = "no deposit address"
+            for attempt in range(collision_retry_max()):
+                dep = await vnx.deposit_address("VCHF", source_blockchain)
+                deposit_address = dep.get("address") or ""
+                if deposit_address:
+                    break
+                dep_err_msg = vnx_error_message(dep) or dep_err_msg
+                if is_vnx_collision_error(dep_err_msg) and attempt + 1 < collision_retry_max():
+                    logger.warning(
+                        "VNX depositAddress contention (attempt %s/%s): %s",
+                        attempt + 1,
+                        collision_retry_max(),
+                        dep_err_msg,
+                    )
+                    await asyncio.sleep(collision_backoff_sec(attempt))
+                    continue
+                break
             if not deposit_address:
                 return BridgeResult(
-                    direction, quantity, "", dest_label, None, None, is_dry_run(), False, "no deposit address"
+                    direction, quantity, "", dest_label, None, None, is_dry_run(), False, dep_err_msg
                 )
 
             logger.info(

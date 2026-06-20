@@ -1046,6 +1046,11 @@ async def step_simulate_all_routes() -> bool:
     async with build_client() as client:
         for direction in ALL_DIRECTIONS:
             sim = await simulate_direction(client, chains, token, cfg, direction, TEST_VCHF)
+            if sim.error:
+                from src.quotes.api_gate import stagger_delay_ms
+
+                await stagger_delay_ms(2000.0)
+                sim = await simulate_direction(client, chains, token, cfg, direction, TEST_VCHF)
             tag = "act" if direction in active else "off"
             if sim.error:
                 _log(f"  FAIL [{tag}] {direction}: {sim.error}")
