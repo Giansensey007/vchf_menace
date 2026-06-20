@@ -107,8 +107,12 @@ async def buy_token_with_stable(
     token: TokenConfig,
     chain_key: str,
     stable_amount: int,
+    *,
+    is_buyback: bool = False,
 ) -> QuoteResult | None:
-    if on_chain_token_buy_blocked(load_bot_config(), chain_key):
+    # On-chain buys are blocked under platform-only EXCEPT a loop-closing buy-back
+    # (re-acquiring the same token to complete a same-asset round trip).
+    if on_chain_token_buy_blocked(load_bot_config(), chain_key, is_buyback=is_buyback):
         return None
     token_addr = token.chains.get(chain_key)
     if not token_addr:
