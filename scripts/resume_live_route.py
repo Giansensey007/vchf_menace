@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Resume live route after leg1: sell Celo VCHF → celo_to_solana → solana_to_vnx."""
+"""Resume live route after leg1: sell Celo VCHF → base_to_solana → solana_to_vnx."""
 from __future__ import annotations
 
 import asyncio
@@ -18,7 +18,7 @@ from src.bridge.cctp_queue import CctpClaimQueue
 from src.bridge.wormhole_queue import WormholeClaimQueue
 from src.config_loader import load_bot_config, load_chains, load_tokens, token_decimals
 from src.db import init_db
-from src.execution.celo import CeloExecutor
+from src.execution.base import BaseExecutor
 from src.execution.executor import ArbExecutor, CycleState
 from src.execution.solana import SolanaExecutor
 from src.execution.tx_log import log_tx, tx_log_path
@@ -41,7 +41,7 @@ async def _audit() -> None:
             f"Platform: USDC={vnx.usdc_balance(bal):.2f} VCHF={vnx.vchf_balance(bal):.2f} "
             f"CHF={vnx._asset_balance(bal, 'CHF'):.2f}"
         )
-    celo = CeloExecutor(chains["celo"])
+    celo = BaseExecutor(chains["celo"])
     dec = token_decimals(token, "celo")
     _log(
         f"Celo: USDT={to_human(celo.balance_erc20(chains['celo'].hub_token), chains['celo'].hub_decimals):.2f} "
@@ -88,7 +88,7 @@ async def _platform() -> dict[str, float]:
 async def _celo_vchf() -> float:
     chains = load_chains()
     token = load_tokens()["VCHF"]
-    celo = CeloExecutor(chains["celo"])
+    celo = BaseExecutor(chains["celo"])
     dec = token_decimals(token, "celo")
     return float(to_human(celo.balance_erc20(token.chains["celo"]), dec))
 
@@ -97,7 +97,7 @@ async def _sell_celo_vchf() -> tuple[bool, str | None]:
     chains = load_chains()
     token = load_tokens()["VCHF"]
     cfg = load_bot_config()
-    celo = CeloExecutor(chains["celo"])
+    celo = BaseExecutor(chains["celo"])
     dec = token_decimals(token, "celo")
     usdt_token = chains["celo"].hub_token
     vchf_raw = celo.balance_erc20(token.chains["celo"])
@@ -146,15 +146,15 @@ async def run_resume() -> int:
         await _cctp_claim()
         await _audit()
 
-        _log(f"\n--- Leg 2: celo_to_solana @ {size:.2f} VCHF ---")
-        prep2 = await treasury.prepare_for_direction("celo_to_solana", size)
+        _log(f"\n--- Leg 2: base_to_solana @ {size:.2f} VCHF ---")
+        prep2 = await treasury.prepare_for_direction("base_to_solana", size)
         _log(f"  prep: ready={prep2.ready} size={prep2.size_vchf:.2f} notes={prep2.notes}")
         if not prep2.ready:
             _log(f"ABORT leg2: {prep2.notes}")
             return 1
-        r2 = await ex.run_cycle(client, "celo_to_solana", prep2.size_vchf, force_execute=True)
-        all_txs["celo_to_solana"] = [t for t in r2.tx_hashes if t and not t.startswith("dry-run")]
-        _log(f"  leg2 state={r2.state.value} txs={all_txs['celo_to_solana']} err={r2.error}")
+        r2 = await ex.run_cycle(client, "base_to_solana", prep2.size_vchf, force_execute=True)
+        all_txs["base_to_solana"] = [t for t in r2.tx_hashes if t and not t.startswith("dry-run")]
+        _log(f"  leg2 state={r2.state.value} txs={all_txs['base_to_solana']} err={r2.error}")
         if r2.state != CycleState.DONE:
             return 1
 

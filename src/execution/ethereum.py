@@ -8,7 +8,7 @@ from web3 import Web3
 
 from src.config_loader import ChainConfig, is_dry_run
 from src.execution.eth_rpc import connect_eth_web3
-from src.execution.celo import ERC20_ABI
+from src.execution.base import ERC20_ABI
 from src.quotes.addresses import checksum
 from src.quotes.sync_throttle import retry_backoff_sec, sync_throttle
 

@@ -17,7 +17,6 @@ CONFIG_DIR = ROOT / "config"
 
 DEFAULT_RPC: dict[str, str] = {
     "RPC_BASE": "https://base.llamarpc.com",
-    "RPC_BASE": "https://base.llamarpc.com",
     "RPC_SOLANA": "https://api.mainnet-beta.solana.com",
     "RPC_ETHEREUM": "https://ethereum.publicnode.com",
 }
@@ -165,8 +164,7 @@ def load_bot_config() -> BotConfig:
         vnx_bridge_timeout_sec=int(
             os.getenv("VNX_BRIDGE_TIMEOUT_SEC", raw.get("vnx_bridge_timeout_sec", 3600))
         ),
-        celo_gas_usd_estimate=float(raw.get("celo_gas_usd_estimate", 0.25)),
-        base_gas_usd_estimate=float(raw.get("base_gas_usd_estimate", 0.25)),
+        base_gas_usd_estimate=float(raw.get("base_gas_usd_estimate", 0.05)),
         solana_fee_usd_estimate=raw.get("solana_fee_usd_estimate", 0.05),
         vnx_bridge_fee_usd=raw.get(
             "vnx_bridge_fee_usd", raw.get("vnx_withdraw_fee_usd", 1.0)

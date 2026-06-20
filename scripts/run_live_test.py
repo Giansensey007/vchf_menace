@@ -30,7 +30,7 @@ load_dotenv(ROOT / ".env")
 
 from src.bridge.cctp import CircleCctpBridge
 from src.config_loader import is_dry_run, load_bot_config, load_chains, load_tokens, token_decimals
-from src.execution.celo import CeloExecutor
+from src.execution.base import BaseExecutor
 from src.execution.ethereum import EthereumExecutor
 from src.execution.solana import SolanaExecutor
 from src.quotes.http_client import build_client
@@ -58,7 +58,7 @@ async def audit_balances() -> bool:
     ok = True
 
     try:
-        celo = CeloExecutor(chains["celo"])
+        celo = BaseExecutor(chains["celo"])
         usdt = to_human(celo.balance_erc20(chains["celo"].hub_token), 6)
         native = to_human(celo.balance_native(), 18)
         _ok("Celo", f"{celo.address[:10]}… USDT={usdt:.2f} CELO={native:.4f}")
@@ -94,7 +94,7 @@ async def audit_balances() -> bool:
 
     vchf_dec = token_decimals(token, "celo")
     try:
-        celo_vchf = to_human(CeloExecutor(chains["celo"]).balance_erc20(token.chains["celo"]), vchf_dec)
+        celo_vchf = to_human(BaseExecutor(chains["celo"]).balance_erc20(token.chains["celo"]), vchf_dec)
         _ok("Celo VCHF on-chain", f"{celo_vchf:.2f}")
     except Exception:
         pass

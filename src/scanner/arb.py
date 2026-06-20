@@ -27,7 +27,7 @@ class ArbOpportunity:
     scanned_at: float
     route_group: str = ""
     selection_reason: str = ""
-    celo_sol_net: float | None = None
+    base_sol_net: float | None = None
     vnx_sol_net: float | None = None
 
 
@@ -48,7 +48,7 @@ class ArbScanner:
 
     async def scan_deploy(self, client: httpx.AsyncClient | None = None) -> ScanSummary:
         """
-        Deploy scan: parallel celo↔sol + SOL↔platform groups, then selection rules.
+        Deploy scan: parallel base↔sol + SOL↔platform groups, then selection rules.
         """
         own = client is None
         if own:
@@ -57,7 +57,7 @@ class ArbScanner:
             selection = await select_execution_route(client, self.chains, self.token, self.bot_cfg)
             self.last_selection = selection
             opps: list[ArbOpportunity] = []
-            for best in (selection.celo_sol, selection.vnx_sol, selection.celo_vnx):
+            for best in (selection.base_sol, selection.vnx_sol, selection.base_vnx):
                 if best is None:
                     continue
                 opps.append(
@@ -71,7 +71,7 @@ class ArbScanner:
                         scanned_at=time.time(),
                         route_group=best.group,
                         selection_reason=selection.reason,
-                        celo_sol_net=selection.celo_sol.net_profit_usd if selection.celo_sol else None,
+                        base_sol_net=selection.base_sol.net_profit_usd if selection.base_sol else None,
                         vnx_sol_net=selection.vnx_sol.net_profit_usd if selection.vnx_sol else None,
                     )
                 )
@@ -97,8 +97,8 @@ class ArbScanner:
                 scanned_at=time.time(),
                 route_group=best.group,
                 selection_reason=summary.selection.reason,
-                celo_sol_net=summary.selection.celo_sol.net_profit_usd
-                if summary.selection.celo_sol
+                base_sol_net=summary.selection.base_sol.net_profit_usd
+                if summary.selection.base_sol
                 else None,
                 vnx_sol_net=summary.selection.vnx_sol.net_profit_usd if summary.selection.vnx_sol else None,
             )

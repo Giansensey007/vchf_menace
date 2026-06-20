@@ -24,7 +24,7 @@ load_dotenv(ROOT / ".env")
 
 from src.bridge.wormhole import WormholePortalBridge
 from src.config_loader import is_dry_run, load_bridge_config, load_chains
-from src.execution.celo import CeloExecutor
+from src.execution.base import BaseExecutor
 
 
 def _log(msg: str) -> None:
@@ -33,7 +33,7 @@ def _log(msg: str) -> None:
 
 def _check_path(
     wh: WormholePortalBridge,
-    celo: CeloExecutor,
+    celo: BaseExecutor,
     dest: str,
     recipient: str,
     amount: float,
@@ -78,13 +78,13 @@ def _check_path(
 
 async def _maybe_execute(
     wh: WormholePortalBridge,
-    celo: CeloExecutor,
+    celo: BaseExecutor,
     dest: str,
     recipient: str,
     amount: float,
 ) -> bool:
     if dest == "sol":
-        br = await wh.bridge_usdt_celo_to_solana(amount, recipient, celo)
+        br = await wh.bridge_usdt_base_to_solana(amount, recipient, celo)
     else:
         br = await wh.bridge_usdt_celo_to_ethereum(amount, recipient, celo)
     _log(
@@ -98,7 +98,7 @@ async def _maybe_execute(
 
 async def run(amount: float, execute: bool) -> int:
     chains = load_chains()
-    celo = CeloExecutor(chains["celo"])
+    celo = BaseExecutor(chains["celo"])
     wh = WormholePortalBridge(chains["celo"])
 
     sol = os.getenv("SOLANA_PUBLIC_KEY", "").strip()
@@ -120,7 +120,7 @@ async def run(amount: float, execute: bool) -> int:
     ok_eth = _check_path(wh, celo, "eth", eth, amount)
 
     _log("\n=== Wormhole USDT ethereum → celo ===")
-    from src.execution.celo import CeloExecutor as _CeloExec
+    from src.execution.base import BaseExecutor as _CeloExec
     from src.execution.ethereum import EthereumExecutor
     from src.quotes.types import to_human
 

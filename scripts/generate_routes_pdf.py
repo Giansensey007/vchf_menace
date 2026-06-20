@@ -58,27 +58,27 @@ def _tex(s: str) -> str:
 
 
 ROUTE_STEPS: dict[str, list[str]] = {
-    "celo_to_solana": [
+    "base_to_solana": [
         "Spend Celo USDT $\\rightarrow$ buy VCHF (Ubeswap)",
         "Deposit VCHF to VNX (CELO, min 5 VCHF cumulative)",
         "Withdraw VCHF to Solana",
         "Sell VCHF for Sol USDC (Jupiter)",
         "Wormhole USDT rebalance Celo $\\leftrightarrow$ Sol (stable leg)",
     ],
-    "solana_to_celo": [
+    "solana_to_base": [
         "Spend Sol USDC $\\rightarrow$ buy VCHF (Jupiter)",
         "Deposit VCHF to VNX (SOL, min 5 VCHF)",
         "Withdraw VCHF to Celo",
         "Sell VCHF for Celo USDT (Ubeswap)",
         "Wormhole USDT rebalance",
     ],
-    "celo_to_vnx": [
+    "base_to_vnx": [
         "Spend Celo USDT $\\rightarrow$ buy VCHF on Celo",
         "Deposit VCHF to VNX platform (CELO)",
         "Platform sell VCHF for USDC",
         "Platform sell VCHF for USDC",
     ],
-    "vnx_to_celo": [
+    "vnx_to_base": [
         "Platform buy VCHF (min 40 VCHF order)",
         "Withdraw VCHF to Celo",
         "Sell VCHF for Celo USDT",

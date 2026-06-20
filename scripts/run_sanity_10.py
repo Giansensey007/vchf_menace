@@ -9,8 +9,8 @@ SA-03  live VNX platform quotes
 SA-04  VNX VCHF deposit addresses (CELO + SOL)
 SA-05  Wormhole USDT bridge quote
 SA-06  VNX VCHF bridge dry-run orchestrator
-SA-07  live simulate celo_to_solana
-SA-08  live simulate solana_to_celo
+SA-07  live simulate base_to_solana
+SA-08  live simulate solana_to_base
 SA-09  pytest suite (unit + integration mocks)
 """
 from __future__ import annotations
@@ -229,7 +229,7 @@ async def agent_sa06() -> AgentResult:
         return "dry-run-deposit"
 
     result = await bridge.bridge_vchf(
-        direction="celo_to_solana",
+        direction="base_to_solana",
         quantity=50.0,
         source_blockchain=os.getenv("VNX_CELO_BLOCKCHAIN", "CELO"),
         dest_blockchain=os.getenv("VNX_SOL_BLOCKCHAIN", "SOL"),
@@ -273,17 +273,17 @@ async def _simulate(direction: str, size: float) -> AgentResult:
     if not sane and sim.error is None:
         parts.append(f"sanity_issues={issues}")
 
-    agent_id = "SA-07" if direction == "celo_to_solana" else "SA-08"
+    agent_id = "SA-07" if direction == "base_to_solana" else "SA-08"
     name = f"live-sim-{direction.replace('_', '-')}"
     return AgentResult(agent_id, name, ok, " | ".join(parts))
 
 
 async def agent_sa07() -> AgentResult:
-    return await _simulate("celo_to_solana", 50.0)
+    return await _simulate("base_to_solana", 50.0)
 
 
 async def agent_sa08() -> AgentResult:
-    return await _simulate("solana_to_celo", 50.0)
+    return await _simulate("solana_to_base", 50.0)
 
 
 async def agent_sa09() -> AgentResult:

@@ -35,7 +35,7 @@ from src.bridge.hub_eth import eth_usdc_to_vnx, wormhole_celo_to_eth, wormhole_e
 from src.bridge.wormhole_queue import WormholeClaimQueue
 from src.treasury.manager import TreasuryManager
 from src.config_loader import load_bot_config, load_bridge_config, load_chains, load_tokens, token_decimals
-from src.execution.celo import CeloExecutor
+from src.execution.base import BaseExecutor
 from src.execution.executor import ArbExecutor, CycleRecord, CycleState
 from src.execution.solana import SolanaExecutor
 from src.execution.tx_log import log_platform_order, log_tx
@@ -84,7 +84,7 @@ async def _balances() -> dict[str, float]:
             _log(f"  VNX balance retry ({exc})")
             time.sleep(2)
 
-    celo = CeloExecutor(chains["celo"])
+    celo = BaseExecutor(chains["celo"])
     dec = token_decimals(token, "celo")
     out["celo_usdt"] = float(to_human(celo.balance_erc20(chains["celo"].hub_token), 6))
     out["celo_vchf"] = float(to_human(celo.balance_erc20(token.chains["celo"]), dec))
@@ -140,10 +140,10 @@ async def route_order_for_balances(b: dict[str, float], *, dust: float) -> list[
     sol_can_fund_plat = b["sol_usdc"] >= USDC_NEAR
     celo_ready = b["celo_usdt"] >= USDT_NEAR
     if celo_ready and not (b["platform_vchf"] >= TEST_VCHF or b["platform_usdc"] >= USDC_NEAR):
-        return ["celo_to_solana", "solana_to_celo", "solana_to_vnx", "vnx_to_solana"]
+        return ["base_to_solana", "solana_to_base", "solana_to_vnx", "vnx_to_solana"]
     if need_plat and sol_can_fund_plat:
-        return ["solana_to_vnx", "vnx_to_solana", "solana_to_celo", "celo_to_solana"]
-    return ["vnx_to_solana", "solana_to_vnx", "solana_to_celo", "celo_to_solana"]
+        return ["solana_to_vnx", "vnx_to_solana", "solana_to_base", "base_to_solana"]
+    return ["vnx_to_solana", "solana_to_vnx", "solana_to_base", "base_to_solana"]
 
 
 def route_ready(direction: str, b: dict[str, float], *, dust: float) -> tuple[bool, str]:
@@ -151,19 +151,19 @@ def route_ready(direction: str, b: dict[str, float], *, dust: float) -> tuple[bo
     if direction == "vnx_to_solana":
         ok = b["platform_vchf"] >= TEST_VCHF or b["platform_usdc"] >= USDC_NEAR
         return ok, "platform VCHF or USDC"
-    if direction == "vnx_to_celo":
+    if direction == "vnx_to_base":
         ok = b["platform_vchf"] >= TEST_VCHF or b["platform_usdc"] >= USDC_NEAR
         return ok, "platform VCHF or USDC"
     if direction == "solana_to_vnx":
         ok = b["sol_usdc"] >= USDC_NEAR and b["celo_vchf"] <= dust and b["sol_vchf"] <= dust
         return ok, "Sol USDC (no on-chain VCHF)"
-    if direction == "celo_to_vnx":
+    if direction == "base_to_vnx":
         ok = b["celo_usdt"] >= USDT_NEAR and b["celo_vchf"] <= dust
         return ok, "Celo USDT (no on-chain VCHF)"
-    if direction == "solana_to_celo":
+    if direction == "solana_to_base":
         ok = b["sol_usdc"] >= USDC_NEAR
         return ok, "Sol USDC"
-    if direction == "celo_to_solana":
+    if direction == "base_to_solana":
         ok = b["celo_usdt"] >= USDT_NEAR
         return ok, "Celo USDT"
     return False, "unknown route"
@@ -376,7 +376,7 @@ async def rebalance(execute: bool) -> bool:
                 _log(f"\nPLAN: Platform buy VCHF (~{need_vchf_plat - b['platform_vchf']:.0f})")
             b = await _balances()
 
-        # Fund Celo USDT via vnx_to_celo (ends with USDT on Celo, VCHF back on platform)
+        # Fund Celo USDT via vnx_to_base (ends with USDT on Celo, VCHF back on platform)
         if b["celo_usdt"] < USDT_FOR_BUY and b["platform_vchf"] >= TEST_VCHF:
             if execute:
                 if not await _fund_chain_stable_via_vnx(client, treasury, executor, "celo", TEST_VCHF, True):
@@ -384,7 +384,7 @@ async def rebalance(execute: bool) -> bool:
                 else:
                     time.sleep(30)
             else:
-                _log(f"\nPLAN: vnx_to_celo {TEST_VCHF} VCHF → Celo USDT")
+                _log(f"\nPLAN: vnx_to_base {TEST_VCHF} VCHF → Celo USDT")
             b = await _balances()
 
         # Fund Sol USDC via vnx_to_solana
