@@ -99,23 +99,26 @@ async def audit() -> None:
     _log(treasury.balance_line(snap))
     _log(InFlightLedger("VCHF").format_audit_block())
     celo_exec = CeloExecutor(chains["celo"])
-    base_exec = BaseExecutor(chains["base"])
-    dec = token_decimals(token, "base")
     celo_dec = token_decimals(token, "celo")
     _log(
         f"Celo: USDT={to_human(celo_exec.balance_erc20(chains['celo'].hub_token), chains['celo'].hub_decimals):.2f} "
         f"VCHF={to_human(celo_exec.balance_erc20(token.chains['celo']), celo_dec):.4f}"
     )
-    from src.bridge.base_usdc import base_usdc_balances
+    if os.getenv("BASE_PRIVATE_KEY", "").strip() and "base" in chains:
+        base_exec = BaseExecutor(chains["base"])
+        dec = token_decimals(token, "base")
+        from src.bridge.base_usdc import base_usdc_balances
 
-    base_bals = base_usdc_balances(base_exec)
-    base_line = (
-        f"Base: USDC={base_bals['canonical']:.2f} "
-        f"VCHF={to_human(base_exec.balance_erc20(token.chains['base']), dec):.4f}"
-    )
-    if base_bals["wrapped_eth"] >= 0.01:
-        base_line += f" (wrapped ETH-USDC={base_bals['wrapped_eth']:.2f} — run consolidate-base-usdc)"
-    _log(base_line)
+        base_bals = base_usdc_balances(base_exec)
+        base_line = (
+            f"Base: USDC={base_bals['canonical']:.2f} "
+            f"VCHF={to_human(base_exec.balance_erc20(token.chains['base']), dec):.4f}"
+        )
+        if base_bals["wrapped_eth"] >= 0.01:
+            base_line += f" (wrapped ETH-USDC={base_bals['wrapped_eth']:.2f} — run consolidate-base-usdc)"
+        _log(base_line)
+    else:
+        _log("Base: SKIP (BASE_PRIVATE_KEY not set)")
     sol = SolanaExecutor(chains["solana"])
     sdec = token_decimals(token, "solana")
     from spl.token.instructions import get_associated_token_address
@@ -145,10 +148,11 @@ async def audit() -> None:
             f"ETH={eth.balance_native()/1e18:.4f}"
         )
         wrapped = wh.get("base_usdc_wormhole_from_eth")
-        if wrapped:
+        if wrapped and os.getenv("BASE_PRIVATE_KEY", "").strip() and "base" in chains:
             from src.execution.ethereum import ERC20_ABI
             from web3 import Web3
 
+            base_exec = BaseExecutor(chains["base"])
             wbal = base_exec.w3.eth.contract(
                 address=Web3.to_checksum_address(wrapped), abi=ERC20_ABI
             ).functions.balanceOf(base_exec.address).call()

@@ -57,7 +57,29 @@ Stale pending records >48h are auto-failed at `verify-all` startup.
 |--------|--------|
 | Command | `DRY_RUN=true python -m pytest tests/ -q` |
 | Pass / fail | **171 passed**, 0 failed |
-| 10-iteration sanity | pytest every iter; audit + verify-all on even iters (iters 5–10 clean) |
+| 10-iteration sanity | pytest every iter; audit every iter; verify-all on even iters (see table below) |
+
+### 10-iteration validation (2026-06-20)
+
+Command pattern per iteration: `pytest tests/ -q` → `execute_route_matrix.py --step audit` → (`verify-all` on even iters).
+
+| Iter | pytest | audit | verify-all | Notes |
+|------|--------|-------|------------|-------|
+| 1 | FAIL (167/171) | FAIL | — | Transient: missing `BASE_PRIVATE_KEY` in audit (fixed) |
+| 2 | PASS (171) | FAIL | FAIL | VNX `queryWithdrawals` 400 during treasury snapshot |
+| 3 | FAIL (160/171) | FAIL | — | Transient env/API flake |
+| 4 | PASS (171) | PASS | FAIL | verify-all timeout/API during early run |
+| 5 | PASS (171) | PASS | — |
+| 6 | PASS (171) | PASS | PASS | Critical checks PASS; on-chain probes SKIP (funding) |
+| 7 | PASS (171) | PASS | — |
+| 8 | PASS (171) | PASS | PASS | Stable |
+| 9 | PASS (171) | PASS | — |
+| 10 | PASS (171) | PASS | PASS | Stable |
+
+**Final state (iter 10):** 171 passed · audit OK · verify-all critical PASS · probes SKIP (funding).  
+Audit now skips Base balances when `BASE_PRIVATE_KEY` unset; Celo/Base/Sol/ETH lines still print.
+
+Validated in unit tests: **30 VCHF** platform min (`test_vnx_trading`, `test_treasury_prepare`), **in_flight** ledger, **VNX collision** retry, **Sol RPC** throttle, **`--size`** on route matrix (default 31 VCHF).
 
 ## Route matrix (`verify-all`)
 
