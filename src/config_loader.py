@@ -165,7 +165,8 @@ def load_bot_config() -> BotConfig:
         vnx_bridge_timeout_sec=int(
             os.getenv("VNX_BRIDGE_TIMEOUT_SEC", raw.get("vnx_bridge_timeout_sec", 3600))
         ),
-        base_gas_usd_estimate=raw.get("base_gas_usd_estimate", 0.25),
+        celo_gas_usd_estimate=float(raw.get("celo_gas_usd_estimate", 0.25)),
+        base_gas_usd_estimate=float(raw.get("base_gas_usd_estimate", 0.25)),
         solana_fee_usd_estimate=raw.get("solana_fee_usd_estimate", 0.05),
         vnx_bridge_fee_usd=raw.get(
             "vnx_bridge_fee_usd", raw.get("vnx_withdraw_fee_usd", 1.0)
@@ -217,31 +218,12 @@ def is_dry_run() -> bool:
     return os.getenv("DRY_RUN", "true").lower() in ("1", "true", "yes")
 
 
-def data_dir() -> Path:
-    d = ROOT / "data"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
-
-
 def db_path() -> Path:
     raw = os.getenv("DB_PATH", "data/bot.db")
     p = Path(raw)
     if not p.is_absolute():
         p = ROOT / p
     p.parent.mkdir(parents=True, exist_ok=True)
-    return p
-
-
-def data_dir() -> Path:
-    """Persistent state directory (parent of DB_PATH, e.g. /data on Railway)."""
-    override = os.getenv("DATA_DIR", "").strip()
-    if override:
-        p = Path(override)
-        if not p.is_absolute():
-            p = ROOT / p
-    else:
-        p = db_path().parent
-    p.mkdir(parents=True, exist_ok=True)
     return p
 
 
