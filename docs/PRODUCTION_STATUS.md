@@ -177,6 +177,7 @@ Use `python scripts/rebalance_for_test.py` after funding to reach route-test min
 | CCTP Sol→ETH→VNX return | Implemented |
 | Wormhole hub legs (Base/Celo↔ETH↔Sol USDT) | Implemented + matrix steps |
 | Min deposit guards (5 VCHF, 20 ETH USDC, 30 VCHF order) | Enforced |
+| ETH→VNX asset guard (USDC only, never USDT on ETH) | `src/vnx/constants.py` + `validate_eth_usdc_vnx_deposit()` |
 | Solana RPC rate limiting | `SOL_RPC_MIN_INTERVAL_MS` + 429 backoff |
 | VNX collision handling (shared GBP account) | `VNX_COLLISION_RETRY_MAX=3` |
 | In-flight ledger (withdraw/deposit/CCTP/Wormhole) | Same as GBP Menace |

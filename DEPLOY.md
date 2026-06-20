@@ -62,6 +62,7 @@
 |-------|-------|-------|
 | BASE/SOL VCHF deposit credit | 5 VCHF cumulative | `VNX_MIN_DEPOSIT_VCHF_*` |
 | ETH USDC deposit credit | 20 USDC cumulative | `VNX_MIN_DEPOSIT_USDC_ETH` |
+| ETH→VNX deposit asset | **USDC only** (never USDT on ETH) | `src/vnx/constants.py` → `VNX_ETH_DEPOSIT_ASSET` |
 | Platform buy/sell order | 30 VCHF | `src/vnx/trading.py` |
 
 ## VNX API keys
@@ -70,7 +71,7 @@
 `scripts/derive_vnx_public_key.py` gets HTTP 401, copy the public key from the UI.
 
 1. Whitelist Base, Solana, and ETH hot wallet addresses on VNX
-2. Confirm VCHF deposit/withdraw for BASE and SOL; USDC for ETH
+2. Confirm VCHF deposit/withdraw for BASE and SOL; **USDC only** for ETH (not USDT)
 3. Optional: top up CHF, then `python scripts/convert_platform_chf.py --execute`
 
 ## Local Docker

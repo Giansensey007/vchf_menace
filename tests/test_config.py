@@ -7,6 +7,8 @@ def test_load_chains():
     assert "solana" in chains
     assert chains["base"].hub_stable == "USDC"
     assert chains["solana"].hub_stable == "USDC"
+    assert chains["celo"].hub_stable == "USDT"
+    assert chains["ethereum"].hub_stable == "USDC"
 
 
 def test_load_tokens():
