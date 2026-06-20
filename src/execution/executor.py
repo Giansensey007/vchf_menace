@@ -12,7 +12,7 @@ import os
 import httpx
 
 from src.bridge.hub_eth import eth_usdc_to_vnx
-from src.vnx.deposits import check_usdc_deposit_amount
+from src.vnx.deposits import validate_eth_usdc_vnx_deposit
 from src.bridge.hub_usdt import usdc_raw_for_solana_buy
 from src.bridge.cctp import CircleCctpBridge
 from src.bridge.wormhole import WormholePortalBridge
@@ -304,7 +304,7 @@ class ArbExecutor:
 
             eth_usdc = br.amount_usdc * 0.995 if br.amount_usdc else usdc_amount * 0.98
             record.state = CycleState.RECONCILING
-            dep_err = check_usdc_deposit_amount("ETH", eth_usdc)
+            dep_err = validate_eth_usdc_vnx_deposit(eth_usdc)
             if dep_err:
                 logger.error("Aborting CCTP return ETH USDC→VNX deposit: %s", dep_err)
                 record.state = CycleState.FAILED

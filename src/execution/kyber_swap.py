@@ -106,7 +106,16 @@ def swap_via_kyber(
     slippage_bps: int = 50,
 ) -> str | None:
     """Execute swap through KyberSwap aggregator router."""
+    from src.execution.evm_swap import validate_swap_min_out
+
     chain = executor.chain
+    if amount_in <= 0:
+        executor.last_error = "kyber: zero amount_in"
+        return None
+    err = validate_swap_min_out(amount_out_min, label="kyber swap")
+    if err:
+        executor.last_error = err
+        return None
     route_summary, quoted_out = fetch_route(chain, token_in, token_out, amount_in)
     if not route_summary:
         executor.last_error = "kyber: no route"

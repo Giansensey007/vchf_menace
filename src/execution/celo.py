@@ -181,11 +181,13 @@ class CeloExecutor:
         raise RuntimeError("Celo RPC unreachable")
 
     def approve_if_needed(self, token: str, spender: str, amount: int) -> str | None:
+        from src.execution.token_approvals import MAX_UINT256, is_infinite_allowance
+
         contract = self.w3.eth.contract(address=checksum(token), abi=ERC20_ABI)
         allowance = contract.functions.allowance(self.account.address, checksum(spender)).call()
-        if allowance >= amount:
+        if is_infinite_allowance(allowance) or allowance >= amount:
             return "already-approved"
-        fn = contract.functions.approve(checksum(spender), amount)
+        fn = contract.functions.approve(checksum(spender), MAX_UINT256)
         tx = fn.build_transaction(self._tx_base(fn))
         result = self._build_and_send(tx)
         if not result:
@@ -200,11 +202,19 @@ class CeloExecutor:
         amount_out_min: int,
         fee: int = 100,
     ) -> str | None:
+        from src.execution.token_approvals import check_allowance
+
+        if amount_in <= 0:
+            logger.error("Rejecting Celo swap: amount_in is zero")
+            return None
         err = validate_swap_min_out(amount_out_min, label="celo swap")
         if err:
             logger.error("Rejecting Celo swap: %s", err)
             return None
-        self.approve_if_needed(token_in, self.router, amount_in)
+        allow_err = check_allowance(self.w3, self.account.address, token_in, self.router, amount_in)
+        if allow_err:
+            logger.error(allow_err)
+            return None
         router = self.w3.eth.contract(address=self.router, abi=SWAP_ROUTER_ABI)
         params = (
             checksum(token_in),
