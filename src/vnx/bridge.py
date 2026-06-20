@@ -199,13 +199,14 @@ class VnxBridge:
                 txids = (wd or {}).get("txids")
                 chains = load_chains()
                 token = load_tokens()["VCHF"]
-                celo_base, sol_base = read_on_chain_token_balances(chains, token)
+                base_base, celo_base, sol_base = read_on_chain_token_balances(chains, token)
                 self._ledger.log_vnx_withdraw(
                     withdraw_qty,
                     dest_blockchain,
                     dest_label,
                     direction,
                     txids,
+                    baseline_base_token=base_base,
                     baseline_celo_token=celo_base,
                     baseline_sol_token=sol_base,
                     baseline_platform_token=balance,
@@ -357,13 +358,14 @@ class VnxBridge:
                 txids = (wd or {}).get("txids")
                 chains = load_chains()
                 token = load_tokens()["VCHF"]
-                celo_base, sol_base = read_on_chain_token_balances(chains, token)
+                base_base, celo_base, sol_base = read_on_chain_token_balances(chains, token)
                 self._ledger.log_vnx_withdraw(
                     withdraw_qty,
                     dest_blockchain,
                     dest_label,
                     direction,
                     txids,
+                    baseline_base_token=base_base,
                     baseline_celo_token=celo_base,
                     baseline_sol_token=sol_base,
                     baseline_platform_token=balance,

@@ -38,6 +38,9 @@ def swap_tokens(
     if err:
         logger.error("Rejecting swap: %s", err)
         return None
+    if amount_in <= 0:
+        logger.error("Rejecting swap: zero amount_in")
+        return None
     if USE_KYBER_SWAP and chain.kyber_slug:
         tx = swap_via_kyber(
             executor,

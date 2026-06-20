@@ -28,6 +28,8 @@ KIND_WORMHOLE_BURN = "wormhole_burn"
 _BLOCKCHAIN_ALIASES = {
     "base": "BASE",
     "BASE": "BASE",
+    "celo": "CELO",
+    "CELO": "CELO",
     "solana": "SOL",
     "sol": "SOL",
     "SOL": "SOL",
@@ -73,31 +75,65 @@ def _norm_blockchain(blockchain: str) -> str:
     return _BLOCKCHAIN_ALIASES.get(blockchain, blockchain.upper())
 
 
-def read_on_chain_token_balances(chains: Any, token: Any) -> tuple[float, float]:
-    """Return (celo_token, sol_token) UI balances for reconcile baselines."""
+def _norm_txid(txid: str | None) -> str:
+    if not txid:
+        return ""
+    return str(txid).strip().lower()
+
+
+def _withdraw_matches(rec: InFlightRecord, api_w: PendingVnxWithdraw) -> bool:
+    if rec.kind != KIND_VNX_WITHDRAW or rec.status != STATUS_PENDING:
+        return False
+    if rec.blockchain != _norm_blockchain(api_w.blockchain):
+        return False
+    api_tx = _norm_txid(api_w.txid)
+    if api_tx and rec.txids:
+        ledger_txs = {_norm_txid(t) for t in rec.txids if t}
+        api_extra = _norm_txid(str(rec.extra.get("api_txid") or ""))
+        if api_tx in ledger_txs or api_tx == api_extra:
+            return True
+    return abs(rec.quantity - api_w.quantity) < 0.05
+
+
+def _api_withdraw_still_pending(rec: InFlightRecord, api_withdrawals: list[PendingVnxWithdraw]) -> bool:
+    return any(_withdraw_matches(rec, w) for w in api_withdrawals)
+
+
+def read_on_chain_token_balances(chains: Any, token: Any) -> tuple[float, float, float]:
+    """Return (base_token, celo_token, sol_token) UI balances for reconcile baselines."""
     from src.config_loader import token_decimals
     from src.execution.base import BaseExecutor
+    from src.execution.celo import CeloExecutor
     from src.execution.solana import SolanaExecutor
     from src.quotes.types import to_human
     from spl.token.instructions import get_associated_token_address
     from solders.pubkey import Pubkey
 
-    celo = BaseExecutor(chains["base"])
-    dec = token_decimals(token, "base")
-    celo_bal = float(to_human(celo.balance_erc20(token.chains["base"]), dec))
-    sol = SolanaExecutor(chains["solana"])
-    sdec = token_decimals(token, "solana")
-    try:
-        mint = Pubkey.from_string(token.chains["solana"])
-        ata = get_associated_token_address(sol.keypair.pubkey(), mint)
-        sol_bal = sol.token_balance_ui(ata)
-    except Exception:
-        sol_bal = 0.0
-    return celo_bal, sol_bal
+    base_bal = 0.0
+    if "base" in chains and token.chains.get("base"):
+        base = BaseExecutor(chains["base"])
+        bdec = token_decimals(token, "base")
+        base_bal = float(to_human(base.balance_erc20(token.chains["base"]), bdec))
+
+    celo_bal = 0.0
+    if "celo" in chains and token.chains.get("celo"):
+        celo = CeloExecutor(chains["celo"])
+        cdec = token_decimals(token, "celo")
+        celo_bal = float(to_human(celo.balance_erc20(token.chains["celo"]), cdec))
+
+    sol_bal = 0.0
+    if "solana" in chains and token.chains.get("solana"):
+        sol = SolanaExecutor(chains["solana"])
+        try:
+            mint = Pubkey.from_string(token.chains["solana"])
+            ata = get_associated_token_address(sol.keypair.pubkey(), mint)
+            sol_bal = sol.token_balance_ui(ata)
+        except Exception:
+            sol_bal = 0.0
+    return base_bal, celo_bal, sol_bal
 
 
 def parse_vnx_withdrawals(api_resp: dict[str, Any] | None, token_asset: str) -> list[PendingVnxWithdraw]:
-    """Parse queryWithdrawals / transfers API response; tolerate unknown shapes."""
     if not api_resp or api_resp.get("result") == "error":
         return []
     rows = (
@@ -142,8 +178,6 @@ def parse_vnx_withdrawals(api_resp: dict[str, Any] | None, token_asset: str) -> 
 
 
 class InFlightLedger:
-    """Persistent ledger for in-flight VNX withdraws, deposits, CCTP/Wormhole burns."""
-
     def __init__(self, token_asset: str, path: Path | None = None) -> None:
         self.token_asset = token_asset
         self.path = path or in_flight_path()
@@ -157,8 +191,7 @@ class InFlightLedger:
             if not line:
                 continue
             try:
-                data = json.loads(line)
-                records.append(InFlightRecord(**data))
+                records.append(InFlightRecord(**json.loads(line)))
             except Exception as exc:
                 logger.warning("Skip corrupt in_flight line: %s", exc)
         return records
@@ -167,14 +200,6 @@ class InFlightLedger:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(asdict(rec), ensure_ascii=False) + "\n")
-        logger.info(
-            "In-flight %s %.4f %s → %s (%s)",
-            rec.kind,
-            rec.quantity,
-            rec.asset,
-            rec.blockchain,
-            rec.direction or rec.destination,
-        )
         return rec
 
     def _new_record(
@@ -212,27 +237,31 @@ class InFlightLedger:
         direction: str,
         txids: list | None = None,
         *,
+        baseline_base_token: float | None = None,
         baseline_celo_token: float | None = None,
         baseline_sol_token: float | None = None,
         baseline_platform_token: float | None = None,
     ) -> InFlightRecord:
         extra: dict[str, Any] = {}
+        if baseline_base_token is not None:
+            extra["baseline_base_token"] = baseline_base_token
         if baseline_celo_token is not None:
             extra["baseline_celo_token"] = baseline_celo_token
         if baseline_sol_token is not None:
             extra["baseline_sol_token"] = baseline_sol_token
         if baseline_platform_token is not None:
             extra["baseline_platform_token"] = baseline_platform_token
-        rec = self._new_record(
-            KIND_VNX_WITHDRAW,
-            quantity,
-            blockchain,
-            destination=destination,
-            direction=direction,
-            txids=[str(t) for t in (txids or []) if t],
-            extra=extra,
+        return self._append(
+            self._new_record(
+                KIND_VNX_WITHDRAW,
+                quantity,
+                blockchain,
+                destination=destination,
+                direction=direction,
+                txids=[str(t) for t in (txids or []) if t],
+                extra=extra,
+            )
         )
-        return self._append(rec)
 
     def log_vnx_deposit(
         self,
@@ -248,15 +277,16 @@ class InFlightLedger:
             extra["deposit_tx"] = deposit_tx
         if baseline_platform_token is not None:
             extra["baseline_platform_token"] = baseline_platform_token
-        rec = self._new_record(
-            KIND_VNX_DEPOSIT,
-            quantity,
-            blockchain,
-            direction=direction,
-            txids=[deposit_tx] if deposit_tx else [],
-            extra=extra,
+        return self._append(
+            self._new_record(
+                KIND_VNX_DEPOSIT,
+                quantity,
+                blockchain,
+                direction=direction,
+                txids=[deposit_tx] if deposit_tx else [],
+                extra=extra,
+            )
         )
-        return self._append(rec)
 
     def log_cctp_burn(
         self,
@@ -265,15 +295,16 @@ class InFlightLedger:
         intent: str = "cctp_bridge",
         quantity: float = 0.0,
     ) -> InFlightRecord:
-        rec = self._new_record(
-            KIND_CCTP_BURN,
-            quantity,
-            dest_chain,
-            direction=intent,
-            txids=[source_tx],
-            extra={"source_tx": source_tx, "dest_chain": dest_chain},
+        return self._append(
+            self._new_record(
+                KIND_CCTP_BURN,
+                quantity,
+                dest_chain,
+                direction=intent,
+                txids=[source_tx],
+                extra={"source_tx": source_tx, "dest_chain": dest_chain},
+            )
         )
-        return self._append(rec)
 
     def log_wormhole_burn(
         self,
@@ -283,15 +314,16 @@ class InFlightLedger:
         intent: str = "wormhole_usdt",
         quantity: float = 0.0,
     ) -> InFlightRecord:
-        rec = self._new_record(
-            KIND_WORMHOLE_BURN,
-            quantity,
-            dest_chain,
-            direction=intent,
-            txids=[source_tx],
-            extra={"source_chain": source_chain, "dest_chain": dest_chain},
+        return self._append(
+            self._new_record(
+                KIND_WORMHOLE_BURN,
+                quantity,
+                dest_chain,
+                direction=intent,
+                txids=[source_tx],
+                extra={"source_chain": source_chain, "dest_chain": dest_chain},
+            )
         )
-        return self._append(rec)
 
     def active(self) -> list[InFlightRecord]:
         return [r for r in self.read_all() if r.status == STATUS_PENDING]
@@ -301,20 +333,15 @@ class InFlightLedger:
 
     def pending_for_blockchain(self, blockchain: str) -> list[InFlightRecord]:
         bc = _norm_blockchain(blockchain)
-        return [
-            r
-            for r in self.pending_vnx_withdraws()
-            if r.blockchain == bc or (bc == "BASE" and r.blockchain == "BASE")
-        ]
+        return [r for r in self.pending_vnx_withdraws() if r.blockchain == bc]
 
     def total_pending_to_blockchain(self, blockchain: str) -> float:
         return sum(r.quantity for r in self.pending_for_blockchain(blockchain))
 
-    def mark_failed(self, record_id: str, reason: str) -> None:
-        self._update_status(record_id, STATUS_FAILED, extra_note=reason)
+    def has_pending_withdraw_to(self, blockchain: str) -> bool:
+        return bool(self.pending_for_blockchain(blockchain))
 
     def purge_stale_pending(self, max_age_hours: float = 48.0) -> int:
-        """Mark pending records older than max_age_hours as failed (ops cleanup)."""
         from datetime import timedelta
 
         cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
@@ -340,32 +367,6 @@ class InFlightLedger:
             self._rewrite(records)
         return count
 
-    def mark_settled(self, record_id: str) -> None:
-        self._update_status(record_id, STATUS_SETTLED, settled_at=_now())
-
-    def _update_status(
-        self,
-        record_id: str,
-        status: str,
-        settled_at: str | None = None,
-        extra_note: str | None = None,
-    ) -> None:
-        records = self.read_all()
-        updated = False
-        for rec in records:
-            if rec.id != record_id or rec.status != STATUS_PENDING:
-                continue
-            rec.status = status
-            rec.updated_at = _now()
-            if settled_at:
-                rec.settled_at = settled_at
-            if extra_note:
-                rec.extra["note"] = extra_note
-            updated = True
-            break
-        if updated:
-            self._rewrite(records)
-
     def _rewrite(self, records: list[InFlightRecord]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         lines = [json.dumps(asdict(r), ensure_ascii=False) for r in records]
@@ -376,20 +377,38 @@ class InFlightLedger:
         *,
         platform_token: float,
         celo_token: float,
+        base_token: float = 0.0,
         sol_token: float,
         api_withdrawals: list[PendingVnxWithdraw] | None = None,
     ) -> list[InFlightRecord]:
-        """Mark settled when balances reflect arrival; merge API pending withdrawals."""
         records = self.read_all()
         changed = False
         for rec in records:
             if rec.status != STATUS_PENDING:
                 continue
             if rec.kind == KIND_VNX_WITHDRAW:
+                if (
+                    rec.extra.get("source") == "vnx_api"
+                    and api_withdrawals is not None
+                    and not _api_withdraw_still_pending(rec, api_withdrawals)
+                ):
+                    rec.status = STATUS_SETTLED
+                    rec.settled_at = _now()
+                    rec.updated_at = rec.settled_at
+                    rec.extra["note"] = "cleared from vnx api"
+                    changed = True
+                    continue
                 bc = rec.blockchain
+                baseline_base = rec.extra.get("baseline_base_token")
                 baseline_celo = rec.extra.get("baseline_celo_token")
                 baseline_sol = rec.extra.get("baseline_sol_token")
-                if bc == "BASE" and baseline_celo is not None:
+                if bc == "BASE" and baseline_base is not None:
+                    if base_token >= float(baseline_base) + rec.quantity * 0.9:
+                        rec.status = STATUS_SETTLED
+                        rec.settled_at = _now()
+                        rec.updated_at = rec.settled_at
+                        changed = True
+                elif bc == "CELO" and baseline_celo is not None:
                     if celo_token >= float(baseline_celo) + rec.quantity * 0.9:
                         rec.status = STATUS_SETTLED
                         rec.settled_at = _now()
@@ -408,111 +427,47 @@ class InFlightLedger:
                     rec.settled_at = _now()
                     rec.updated_at = rec.settled_at
                     changed = True
-            elif rec.kind in (KIND_CCTP_BURN, KIND_WORMHOLE_BURN):
-                if self._reconcile_bridge_queue_item(rec):
-                    changed = True
 
         if api_withdrawals:
             for api_w in api_withdrawals:
-                if not any(
-                    r.kind == KIND_VNX_WITHDRAW
-                    and r.status == STATUS_PENDING
-                    and r.blockchain == api_w.blockchain
-                    and abs(r.quantity - api_w.quantity) < 0.05
-                    for r in records
-                ):
-                    extra: dict[str, Any] = {"source": "vnx_api"}
-                    if api_w.txid:
-                        extra["api_txid"] = api_w.txid
-                    new_rec = self._new_record(
-                        KIND_VNX_WITHDRAW,
-                        api_w.quantity,
-                        api_w.blockchain,
-                        destination=api_w.destination,
-                        direction="api_pending",
-                        txids=[api_w.txid] if api_w.txid else [],
-                        extra=extra,
-                    )
-                    if api_w.created_at:
-                        new_rec.created_at = api_w.created_at
-                    records.append(new_rec)
-                    changed = True
+                if any(_withdraw_matches(r, api_w) for r in records):
+                    continue
+                extra: dict[str, Any] = {
+                    "source": "vnx_api",
+                    "baseline_base_token": base_token,
+                    "baseline_celo_token": celo_token,
+                    "baseline_sol_token": sol_token,
+                    "baseline_platform_token": platform_token,
+                }
+                if api_w.txid:
+                    extra["api_txid"] = api_w.txid
+                new_rec = self._new_record(
+                    KIND_VNX_WITHDRAW,
+                    api_w.quantity,
+                    api_w.blockchain,
+                    destination=api_w.destination,
+                    direction="api_pending",
+                    txids=[api_w.txid] if api_w.txid else [],
+                    extra=extra,
+                )
+                if api_w.created_at:
+                    new_rec.created_at = api_w.created_at
+                records.append(new_rec)
+                changed = True
 
         if changed:
             self._rewrite(records)
         return self.active()
 
-    def _reconcile_bridge_queue_item(self, rec: InFlightRecord) -> bool:
-        try:
-            if rec.kind == KIND_CCTP_BURN:
-                from src.bridge.cctp_queue import CctpClaimQueue, CctpQueueStatus
-
-                queue = CctpClaimQueue()
-                source_tx = rec.extra.get("source_tx") or (rec.txids[0] if rec.txids else "")
-                for item in queue._store.items:
-                    if item.source_tx == source_tx:
-                        if item.status == CctpQueueStatus.CLAIMED.value:
-                            rec.status = STATUS_SETTLED
-                            rec.settled_at = _now()
-                            rec.updated_at = rec.settled_at
-                            return True
-                        if item.status == CctpQueueStatus.FAILED.value:
-                            rec.status = STATUS_FAILED
-                            rec.extra["note"] = item.error or "cctp failed"
-                            rec.updated_at = _now()
-                            return True
-                        break
-            elif rec.kind == KIND_WORMHOLE_BURN:
-                from src.bridge.wormhole_queue import WormholeClaimQueue, WormholeQueueStatus
-
-                queue = WormholeClaimQueue()
-                source_tx = (rec.txids[0] if rec.txids else "").lower()
-                for item in queue._store.items:
-                    if item.source_tx.lower() == source_tx:
-                        if item.status == WormholeQueueStatus.CLAIMED.value:
-                            rec.status = STATUS_SETTLED
-                            rec.settled_at = _now()
-                            rec.updated_at = rec.settled_at
-                            return True
-                        if item.status == WormholeQueueStatus.FAILED.value:
-                            rec.status = STATUS_FAILED
-                            rec.extra["note"] = item.error or "wormhole failed"
-                            rec.updated_at = _now()
-                            return True
-                        break
-        except Exception as exc:
-            logger.debug("Bridge queue reconcile skip: %s", exc)
-        return False
-
     def format_summary(self) -> str:
         active = self.active()
         if not active:
             return "in-flight: none"
-        parts = []
-        for r in active:
-            tx = r.txids[0] if r.txids else ""
-            parts.append(
-                f"{r.kind} {r.quantity:.2f} {r.asset}→{r.blockchain}"
-                f" since={r.created_at[:19]} tx={tx}"
-            )
+        parts = [
+            f"{r.kind} {r.quantity:.2f} {r.asset}→{r.blockchain} since={r.created_at[:19]}"
+            for r in active
+        ]
         return "in-flight: " + "; ".join(parts)
-
-    def format_audit_block(self) -> str:
-        lines = ["--- In-flight / pending ---"]
-        active = self.active()
-        if not active:
-            lines.append("  (none)")
-        else:
-            for r in active:
-                tx = ", ".join(r.txids) if r.txids else "n/a"
-                lines.append(
-                    f"  {r.kind}: {r.quantity:.4f} {r.asset} blockchain={r.blockchain} "
-                    f"dest={r.destination} status={r.status} since={r.created_at[:19]} tx={tx}"
-                )
-        api_pending = [r for r in active if r.extra.get("source") == "vnx_api"]
-        if api_pending:
-            lines.append(f"  VNX API pending withdrawals: {len(api_pending)}")
-        return "\n".join(lines)
 
 
 def format_treasury_balance_line(
@@ -522,15 +477,15 @@ def format_treasury_balance_line(
     pending_vnx_withdraws: list[PendingVnxWithdraw] | None = None,
     in_flight_summary: str | None = None,
 ) -> str:
-    """Compact one-line balance summary for poll cycles."""
     plat = getattr(snap, f"platform_{token_field}", 0.0)
     celo_t = getattr(snap, f"celo_{token_field}", 0.0)
+    base_t = getattr(snap, f"base_{token_field}", 0.0)
     sol_t = getattr(snap, f"sol_{token_field}", 0.0)
-    usdc = getattr(snap, "platform_usdc", 0.0)
-    chf = getattr(snap, "platform_chf", 0.0)
     line = (
-        f"Balances: plat {token_field.upper()}={plat:.2f} USDC={usdc:.2f} CHF={chf:.2f} | "
-        f"Base {token_field.upper()}={celo_t:.4f} USDT={snap.base_usdc:.2f} | "
+        f"Balances: plat {token_field.upper()}={plat:.2f} USDC={snap.platform_usdc:.2f} "
+        f"CHF={snap.platform_chf:.2f} | "
+        f"Celo {token_field.upper()}={celo_t:.4f} USDT={getattr(snap, 'celo_usdt', 0.0):.2f} | "
+        f"Base {token_field.upper()}={base_t:.4f} USDC={getattr(snap, 'base_usdc', 0.0):.2f} | "
         f"Sol {token_field.upper()}={sol_t:.4f} USDC={snap.sol_usdc:.2f}"
     )
     if pending_vnx_withdraws:

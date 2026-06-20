@@ -70,8 +70,12 @@ class ArbExecutor:
         self.sol = chains.get("solana")
         self.eth = chains.get("ethereum")
         self.vnx = chains.get("vnx")
-        if not self.base or not self.sol or not self.vnx:
-            raise ValueError("base, solana, and vnx chains required")
+        if not self.sol or not self.vnx:
+            raise ValueError("solana and vnx chains required")
+        if not self.base and not self.celo:
+            raise ValueError("at least one EVM hub (base or celo) required")
+        if not self.base:
+            logger.warning("base chain not configured — Base routes unavailable")
         if not self.celo:
             logger.warning("celo chain not configured — Celo routes unavailable")
 
@@ -186,7 +190,7 @@ class ArbExecutor:
         route = route_for_direction(direction)
         if route and route.needs_vnx_usdc and not self.bot_cfg.enable_vnx_arb_routes:
             record.state = CycleState.FAILED
-            record.error = "base↔vnx disabled — fund ETH USDC manually or enable ENABLE_VNX_ARB_ROUTES"
+            record.error = "celo/base↔vnx disabled — fund ETH USDC manually or enable ENABLE_VNX_ARB_ROUTES"
             save_cycle(record)
             return record
         if route and route.needs_cctp and not self.bot_cfg.enable_vnx_cctp_routes:
@@ -347,6 +351,242 @@ class ArbExecutor:
 
         save_cycle(record)
         return record
+
+    async def _exec_celo_to_solana(
+        self, client: httpx.AsyncClient, record: CycleRecord, sim: CycleSimulation
+    ) -> None:
+        celo_exec = CeloExecutor(self.celo)
+        sol_exec = SolanaExecutor(self.sol)
+        celo_dec = token_decimals(self.token, "celo")
+        sol_dec = token_decimals(self.token, "solana")
+        target = record.size_vchf
+
+        on_chain = float(to_human(celo_exec.balance_erc20(self.token.chains["celo"]), celo_dec))
+        if self._may_reuse_on_chain_vchf() and on_chain >= target * 0.99:
+            vchf_amt = min(on_chain, target)
+            logger.info("Celo already has %.2f VCHF — skip buy", on_chain)
+        else:
+            vchf_amt = sim.token_mid if sim.token_mid > 0 else target
+            usdt_in = from_human(sim.stable_in_usd, self.celo.hub_decimals)
+            min_vchf = int(vchf_amt * 0.995 * 10**celo_dec)
+            tx1 = self._evm_swap(
+                celo_exec,
+                self.celo,
+                self.celo.hub_token,
+                self.token.chains["celo"],
+                usdt_in,
+                min_vchf,
+            )
+            if not tx1:
+                record.state = CycleState.FAILED
+                record.error = "celo buy VCHF failed"
+                return
+            record.tx_hashes.append(tx1)
+            log_cycle_step(record.id, "celo_buy_vchf", {"tx": tx1})
+            import time
+
+            for _ in range(20):
+                on_chain = float(to_human(celo_exec.balance_erc20(self.token.chains["celo"]), celo_dec))
+                if on_chain >= target * 0.95:
+                    break
+                time.sleep(3)
+            vchf_amt = min(on_chain, target)
+            if vchf_amt < target * 0.9:
+                record.state = CycleState.FAILED
+                record.error = f"insufficient Celo VCHF after buy ({on_chain:.2f} < {target})"
+                return
+            logger.info("Celo VCHF after buy: %.4f (deposit %.4f)", on_chain, vchf_amt)
+
+        record.state = CycleState.BRIDGING
+        bridge = VnxBridge(self.bot_cfg)
+
+        async def deposit_builder(addr: str) -> str | None:
+            return celo_exec.transfer_erc20(
+                self.token.chains["celo"], addr, from_human(vchf_amt, celo_dec)
+            )
+
+        br = await bridge.bridge_vchf(
+            direction="celo_to_solana",
+            quantity=vchf_amt,
+            source_blockchain=os.getenv("VNX_CELO_BLOCKCHAIN", "CELO"),
+            dest_blockchain=os.getenv("VNX_SOL_BLOCKCHAIN", "SOL"),
+            dest_label=os.getenv("VNX_SOL_WITHDRAW_LABEL", "sol-hot"),
+            deposit_tx_builder=deposit_builder,
+        )
+        if not br.success:
+            record.state = CycleState.FAILED
+            record.error = br.error or "bridge failed"
+            return
+        if br.deposit_tx:
+            record.tx_hashes.append(br.deposit_tx)
+
+        record.state = CycleState.EXECUTING
+        from spl.token.instructions import get_associated_token_address
+        from solders.pubkey import Pubkey
+
+        vchf_ata = get_associated_token_address(
+            sol_exec.keypair.pubkey(), Pubkey.from_string(self.token.chains["solana"])
+        )
+        deadline = time.time() + self.bot_cfg.vnx_bridge_timeout_sec
+        needed = from_human(vchf_amt * 0.99, sol_dec)
+        while time.time() < deadline:
+            try:
+                bal = sol_exec.token_account_balance(vchf_ata)
+                if int(bal.value.amount) >= needed:
+                    break
+            except Exception:
+                pass
+            await asyncio.sleep(self.bot_cfg.vnx_bridge_poll_sec)
+        else:
+            from src.treasury.in_flight import InFlightLedger
+
+            record.state = CycleState.FAILED
+            record.error = (
+                f"timeout waiting for VCHF on Sol after VNX withdraw — "
+                f"funds may be pending at VNX ({InFlightLedger('VCHF').format_summary()})"
+            )
+            return
+
+        tx2 = await sol_exec.swap(
+            client,
+            self.token.chains["solana"],
+            self.sol.hub_token,
+            from_human(vchf_amt, sol_dec),
+            self.bot_cfg.slippage_bps,
+        )
+        if not tx2:
+            record.state = CycleState.FAILED
+            record.error = "solana sell VCHF failed"
+            return
+        record.tx_hashes.append(tx2)
+        log_cycle_step(record.id, "sol_sell_vchf", {"tx": tx2})
+
+        await self._reconcile_stable_usdt(client, record, "celo_to_solana", sim.stable_out_usd)
+        record.state = CycleState.DONE
+
+    async def _exec_solana_to_celo(
+        self, client: httpx.AsyncClient, record: CycleRecord, sim: CycleSimulation
+    ) -> None:
+        celo_exec = CeloExecutor(self.celo)
+        sol_exec = SolanaExecutor(self.sol)
+        celo_dec = token_decimals(self.token, "celo")
+        sol_dec = token_decimals(self.token, "solana")
+        target = record.size_vchf
+
+        from spl.token.instructions import get_associated_token_address
+        from solders.pubkey import Pubkey
+
+        vchf_ata = get_associated_token_address(
+            sol_exec.keypair.pubkey(), Pubkey.from_string(self.token.chains["solana"])
+        )
+        try:
+            on_chain = sol_exec.token_balance_ui(vchf_ata)
+        except Exception:
+            on_chain = 0.0
+
+        if self._may_reuse_on_chain_vchf() and on_chain >= target * 0.99:
+            vchf_amt = min(on_chain, target)
+            logger.info("Solana already has %.2f VCHF — skip buy, deposit %.2f", on_chain, vchf_amt)
+        else:
+            usdc_raw, _ = await usdc_raw_for_solana_buy(client, sim.stable_in_usd)
+            usdc_in = usdc_raw if usdc_raw is not None else from_human(sim.stable_in_usd, self.sol.hub_decimals)
+            tx1 = await sol_exec.swap(
+                client,
+                self.sol.hub_token,
+                self.token.chains["solana"],
+                usdc_in,
+                self.bot_cfg.slippage_bps,
+            )
+            if not tx1:
+                record.state = CycleState.FAILED
+                record.error = "solana buy VCHF failed"
+                return
+            record.tx_hashes.append(tx1)
+
+            import time
+
+            for _ in range(30):
+                try:
+                    on_chain = sol_exec.token_balance_ui(vchf_ata)
+                except Exception:
+                    on_chain = 0.0
+                if on_chain >= target * 0.95:
+                    break
+                time.sleep(SOL_BALANCE_POLL_SEC)
+            vchf_amt = min(on_chain, target)
+            if vchf_amt < target * 0.9:
+                record.state = CycleState.FAILED
+                record.error = f"insufficient VCHF after buy ({on_chain:.2f} < {target})"
+                return
+            logger.info("Solana VCHF after buy: %.4f (deposit %.4f)", on_chain, vchf_amt)
+
+        record.state = CycleState.BRIDGING
+        bridge = VnxBridge(self.bot_cfg)
+
+        async def deposit_builder(addr: str) -> str | None:
+            return sol_exec.transfer_spl(
+                self.token.chains["solana"], addr, from_human(vchf_amt, sol_dec), sol_dec
+            )
+
+        br = await bridge.bridge_vchf(
+            direction="solana_to_celo",
+            quantity=vchf_amt,
+            source_blockchain=os.getenv("VNX_SOL_BLOCKCHAIN", "SOL"),
+            dest_blockchain=os.getenv("VNX_CELO_BLOCKCHAIN", "CELO"),
+            dest_label=os.getenv("VNX_CELO_WITHDRAW_LABEL", "celo-hot"),
+            deposit_tx_builder=deposit_builder,
+        )
+        if not br.success:
+            record.state = CycleState.FAILED
+            record.error = br.error or "bridge failed"
+            return
+        if br.deposit_tx:
+            record.tx_hashes.append(br.deposit_tx)
+
+        deadline = time.time() + self.bot_cfg.vnx_bridge_timeout_sec
+        needed = from_human(vchf_amt * 0.99, celo_dec)
+        while time.time() < deadline:
+            if celo_exec.balance_erc20(self.token.chains["celo"]) >= needed:
+                break
+            await asyncio.sleep(self.bot_cfg.vnx_bridge_poll_sec)
+        else:
+            from src.treasury.in_flight import InFlightLedger
+
+            record.state = CycleState.FAILED
+            record.error = (
+                f"timeout waiting for VCHF on Celo after VNX withdraw — "
+                f"funds may be pending at VNX ({InFlightLedger('VCHF').format_summary()})"
+            )
+            return
+
+        min_usdt, swap_err = self._min_stable_out_raw(
+            sim.stable_out_usd,
+            self.celo.hub_decimals,
+            chain_key="celo",
+            celo_exec=celo_exec,
+            token_in=self.token.chains["celo"],
+            token_out=self.celo.hub_token,
+            amount_in=from_human(vchf_amt, celo_dec),
+        )
+        if swap_err:
+            record.state = CycleState.FAILED
+            record.error = swap_err
+            return
+        tx2 = self._evm_swap(
+            celo_exec,
+            self.celo,
+            self.token.chains["celo"],
+            self.celo.hub_token,
+            from_human(vchf_amt, celo_dec),
+            min_usdt,
+        )
+        if not tx2:
+            record.state = CycleState.FAILED
+            record.error = "celo sell VCHF failed"
+            return
+        record.tx_hashes.append(tx2)
+        await self._reconcile_stable_usdt(client, record, "solana_to_celo", sim.stable_out_usd)
+        record.state = CycleState.DONE
 
     async def _exec_base_to_solana(
         self, client: httpx.AsyncClient, record: CycleRecord, sim: CycleSimulation

@@ -301,39 +301,8 @@ class EthereumExecutor:
                 self.w3 = connect_eth_web3(None)
         return None
 
-    def approve_if_needed(self, token: str, spender: str, amount: int) -> str | None:
-        contract = self.w3.eth.contract(address=checksum(token), abi=ERC20_ABI)
-        allowance = contract.functions.allowance(self.account.address, checksum(spender)).call()
-        if allowance >= amount:
-            return "already-approved"
-        approve_amount = 2**256 - 1
-        fn = contract.functions.approve(checksum(spender), approve_amount)
-        tx = fn.build_transaction(self._base_tx(fn))
-        return self._build_and_send(tx, fn=fn)
-
     def _uses_permit2(self, router_addr: str) -> bool:
         return checksum(router_addr).lower() == checksum(SWAP_ROUTER02_ADDRESS).lower()
-
-    def approve_permit2_if_needed(self, token: str, router_addr: str, amount: int) -> str | None:
-        """SwapRouter02 pulls via Permit2 — ERC20 approve to router alone is not enough."""
-        import time
-
-        if not self._uses_permit2(router_addr):
-            return self.approve_if_needed(token, router_addr, amount)
-
-        self.approve_if_needed(token, PERMIT2_ADDRESS, amount)
-        permit2 = self.w3.eth.contract(address=checksum(PERMIT2_ADDRESS), abi=PERMIT2_ABI)
-        current = permit2.functions.allowance(
-            self.account.address, checksum(token), checksum(router_addr)
-        ).call()
-        if int(current[0]) >= amount and int(current[1]) > time.time():
-            return "already-approved"
-        expiration = int(time.time()) + 86400 * 30
-        fn = permit2.functions.approve(
-            checksum(token), checksum(router_addr), min(amount, 2**160 - 1), expiration
-        )
-        tx = fn.build_transaction(self._base_tx(fn))
-        return self._build_and_send(tx, fn=fn)
 
     def deposit_for_burn(
         self,
@@ -349,8 +318,14 @@ class EthereumExecutor:
         if len(mint_recipient) != 32:
             raise ValueError("mint_recipient must be 32 bytes")
 
+        from src.execution.token_approvals import check_allowance
+
         tm = self.w3.eth.contract(address=checksum(token_messenger), abi=TOKEN_MESSENGER_V2_ABI)
-        self.approve_if_needed(usdc, token_messenger, amount)
+        err = check_allowance(self.w3, self.account.address, usdc, token_messenger, amount)
+        if err:
+            self.last_error = err
+            logger.error(err)
+            return None
 
         fn = tm.functions.depositForBurn(
             amount,
@@ -406,12 +381,18 @@ class EthereumExecutor:
     ) -> str | None:
         import time
 
-        self.approve_if_needed(token, bridge, amount)
+        from src.execution.token_approvals import check_allowance
+
+        err = check_allowance(self.w3, self.account.address, token, bridge, amount)
+        if err:
+            self.last_error = err
+            logger.error(err)
+            return None
         contract = self.w3.eth.contract(address=checksum(bridge), abi=WORMHOLE_TRANSFER_ABI)
         erc20 = self.w3.eth.contract(address=checksum(token), abi=ERC20_ABI)
         allowance = erc20.functions.allowance(self.account.address, checksum(bridge)).call()
         if allowance < amount:
-            self.last_error = f"USDT allowance {allowance} < amount {amount} (approve likely failed — low ETH gas?)"
+            self.last_error = f"USDT allowance {allowance} < amount {amount} — run scripts/approve_all.py"
             logger.error(self.last_error)
             return None
         fn = contract.functions.transferTokens(
@@ -466,7 +447,13 @@ class EthereumExecutor:
             return None
         import time
 
-        self.approve_permit2_if_needed(token_in, router_addr, amount_in)
+        from src.execution.token_approvals import check_swap_input_allowance
+
+        err = check_swap_input_allowance(self.w3, self.account.address, token_in, router_addr, amount_in)
+        if err:
+            self.last_error = err
+            logger.error(err)
+            return None
         router = self.w3.eth.contract(address=checksum(router_addr), abi=SWAP_ROUTER_ABI)
         deadline = int(time.time()) + 600
         params = (
@@ -575,7 +562,13 @@ class EthereumExecutor:
                 )
                 q.raise_for_status()
                 route = q.json()["priceRoute"]
-                self.approve_if_needed(self.chain.hub_token, proxy, amount_in)
+                from src.execution.token_approvals import check_allowance
+
+                err = check_allowance(self.w3, self.account.address, self.chain.hub_token, proxy, amount_in)
+                if err:
+                    self.last_error = err
+                    logger.error(err)
+                    return None
                 txr = client.post(
                     "https://apiv5.paraswap.io/transactions/1",
                     json={

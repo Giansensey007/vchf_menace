@@ -2,6 +2,14 @@ from __future__ import annotations
 
 import os
 
+from src.vnx.constants import (
+    CELO_HUB_STABLE,
+    ETH_HUB_STABLE,
+    VNX_ETH_DEPOSIT_ASSET,
+    check_eth_hub_stable_for_vnx,
+    check_vnx_eth_deposit_asset,
+)
+
 _DEFAULT_MIN_USDC_DEPOSIT: dict[str, float] = {"ETH": 20.0}
 
 
@@ -49,3 +57,16 @@ def check_usdc_deposit_amount(blockchain: str, quantity: float) -> str | None:
             f"{min_qty:.2f} USDC (cumulative on-chain transfers must reach minimum before credit)"
         )
     return None
+
+
+def validate_eth_usdc_vnx_deposit(
+    quantity: float,
+    *,
+    asset: str = VNX_ETH_DEPOSIT_ASSET,
+    blockchain: str = "ETH",
+) -> str | None:
+    """Asset + minimum guard for ETH→VNX USDC deposit (rejects USDT on ETH)."""
+    asset_err = check_vnx_eth_deposit_asset(asset, blockchain)
+    if asset_err:
+        return asset_err
+    return check_usdc_deposit_amount(blockchain, quantity)

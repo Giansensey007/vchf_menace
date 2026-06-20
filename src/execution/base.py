@@ -200,7 +200,12 @@ class BaseExecutor:
         amount_out_min: int,
         fee: int = 100,
     ) -> str | None:
-        self.approve_if_needed(token_in, self.router, amount_in)
+        from src.execution.token_approvals import check_allowance
+
+        err = check_allowance(self.w3, self.account.address, token_in, self.router, amount_in)
+        if err:
+            logger.error(err)
+            return None
         router = self.w3.eth.contract(address=self.router, abi=SWAP_ROUTER_ABI)
         params = (
             checksum(token_in),

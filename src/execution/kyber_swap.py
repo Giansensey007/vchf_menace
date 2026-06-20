@@ -8,6 +8,7 @@ import httpx
 
 from src.config_loader import ChainConfig
 from src.quotes.addresses import checksum
+from src.quotes.sync_throttle import sync_throttle
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,7 @@ def fetch_route(
         "amountIn": str(amount_in),
     }
     try:
+        sync_throttle("kyber")
         with httpx.Client(timeout=25.0) as client:
             resp = client.get(url, params=params, headers=_kyber_headers())
             if resp.status_code >= 400:
@@ -79,6 +81,7 @@ def build_swap_tx(
         "slippageTolerance": max(1, slippage_bps),
     }
     try:
+        sync_throttle("kyber")
         with httpx.Client(timeout=25.0) as client:
             resp = client.post(url, json=payload, headers=_kyber_headers())
             if resp.status_code >= 400:
@@ -118,7 +121,13 @@ def swap_via_kyber(
         return None
 
     router = checksum(built["routerAddress"])
-    executor.approve_if_needed(token_in, router, amount_in)
+    from src.execution.token_approvals import check_allowance
+
+    err = check_allowance(executor.w3, executor.account.address, token_in, router, amount_in)
+    if err:
+        executor.last_error = err
+        logger.error(err)
+        return None
     tx = {
         "from": executor.account.address,
         "to": router,
