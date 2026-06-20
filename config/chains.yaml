@@ -1,4 +1,22 @@
 chains:
+  celo:
+    name: Celo
+    chain_id: 42220
+    enabled: true
+    bridge_verified: true
+    quote_tier: onchain
+    hub_stable: USDT
+    hub_token: "0x48065fbbe25f71c9282ddf5e1cd6d6a887483d5e"
+    hub_decimals: 6
+    rpc_env: RPC_CELO
+    swap_router: "0x5615CDAb10dc425a742d643d949a7F474C01abc4"
+    quoter_v2: "0x82825d0554fA07f7FC52Ab63c961F330fdEFa8E8"
+    pools:
+      vchf_usdt:
+        address: "0x899f68521196b4db5e3525e8ce1695efa9b05533"
+        fee: 100
+        token0_is_vchf: true
+
   base:
     name: Base
     chain_id: 8453
@@ -16,10 +34,12 @@ chains:
       vchf_usdc:
         fee: 3000
         token0_is_vchf: true
+
   solana:
     name: Solana
     chain_type: solana
     chain_id: 0
+    kyber_slug: null
     enabled: true
     bridge_verified: true
     quote_tier: jupiter
@@ -27,10 +47,12 @@ chains:
     hub_token: EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v
     hub_decimals: 6
     rpc_env: RPC_SOLANA
+
   vnx:
     name: VNX Platform
     chain_type: vnx
     chain_id: 0
+    kyber_slug: null
     enabled: true
     bridge_verified: true
     quote_tier: vnx
@@ -38,12 +60,14 @@ chains:
     hub_token: USDC
     hub_decimals: 6
     rpc_env: VNX_API_PUBLIC_KEY
+
   ethereum:
     name: Ethereum
     chain_id: 1
+    kyber_slug: ethereum
     enabled: true
     bridge_verified: true
-    quote_tier: onchain
+    quote_tier: aggregator
     hub_stable: USDC
     hub_token: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
     hub_decimals: 6

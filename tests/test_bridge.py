@@ -49,9 +49,9 @@ async def test_bridge_dry_run(bot_cfg):
         mock_cls.return_value.__aenter__.return_value = inst
         inst.deposit_address.return_value = {"address": "0xdep123"}
         result = await bridge.bridge_vchf(
-            direction="celo_to_solana",
+            direction="base_to_solana",
             quantity=50.0,
-            source_blockchain="CELO",
+            source_blockchain="BASE",
             dest_blockchain="SOL",
             dest_label="sol-hot",
             deposit_tx_builder=fake_deposit,

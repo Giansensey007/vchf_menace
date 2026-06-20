@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from src.config_loader import BotConfig, load_chains, load_tokens
+from src.config_loader import BotConfig, ChainConfig, TokenConfig
 from src.treasury.manager import TreasuryManager, TreasurySnapshot
 from src.vnx.bridge import VCHF_WITHDRAW_FEE_BUFFER
 from src.vnx.trading import VCHF_MIN_ORDER, VCHF_USDC_QTY_DECIMALS, _round_down
@@ -44,11 +44,65 @@ def _bot_cfg(**overrides) -> BotConfig:
     return BotConfig(**base)
 
 
+def _minimal_chains() -> dict[str, ChainConfig]:
+    evm = dict(
+        enabled=True,
+        bridge_verified=True,
+        quote_tier="aggregator",
+        hub_decimals=6,
+        chain_type="evm",
+    )
+    return {
+        "base": ChainConfig(
+            key="base",
+            name="Base",
+            chain_id=8453,
+            hub_stable="USDC",
+            hub_token="0x833589fCD6eDb6E08f4c7C32D4F71b54bda02913",
+            rpc_env="RPC_BASE",
+            **evm,
+        ),
+        "solana": ChainConfig(
+            key="solana",
+            name="Solana",
+            chain_id=0,
+            hub_stable="USDC",
+            hub_token="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            rpc_env="RPC_SOLANA",
+            chain_type="solana",
+            enabled=True,
+            bridge_verified=True,
+            quote_tier="jupiter",
+            hub_decimals=6,
+        ),
+        "vnx": ChainConfig(
+            key="vnx",
+            name="VNX",
+            chain_id=0,
+            hub_stable="USDC",
+            hub_token="USDC",
+            rpc_env="VNX_API",
+            chain_type="vnx",
+            enabled=True,
+            bridge_verified=True,
+            quote_tier="platform",
+            hub_decimals=6,
+        ),
+    }
+
+
 @pytest.fixture
 def treasury() -> TreasuryManager:
-    chains = load_chains()
-    token = load_tokens()["VCHF"]
-    return TreasuryManager(chains, token, _bot_cfg())
+    token = TokenConfig(
+        symbol="VCHF",
+        decimals=18,
+        chains={
+            "base": "0x899f68521196b4db5e3525e8ce1695efa9b05533",
+            "solana": "7s9J79R9o9x8F9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K",
+            "vnx": "VCHF",
+        },
+    )
+    return TreasuryManager(_minimal_chains(), token, _bot_cfg())
 
 
 async def _prepare(
@@ -56,15 +110,15 @@ async def _prepare(
     *,
     platform_vchf: float,
     platform_usdc: float,
-    direction: str = "vnx_to_celo",
+    direction: str = "vnx_to_base",
     size: float = 31.0,
-    celo_usdt: float = 500.0,
+    base_usdc: float = 500.0,
     sol_usdc: float = 500.0,
 ):
     snap = TreasurySnapshot(
         platform_vchf=platform_vchf,
         platform_usdc=platform_usdc,
-        celo_usdt=celo_usdt,
+        base_usdc=base_usdc,
         sol_usdc=sol_usdc,
     )
     with patch.object(treasury, "snapshot", AsyncMock(return_value=snap)):

@@ -13,7 +13,7 @@ def test_sign_deterministic_payload():
 
 
 def test_auth_headers_shape():
-    h = auth_headers("/api/v1/private/depositAddress", {"asset": "VCHF", "blockchain": "CELO"})
+    h = auth_headers("/api/v1/private/depositAddress", {"asset": "VCHF", "blockchain": "BASE"})
     assert h["Content-Type"] == "application/json"
 
 

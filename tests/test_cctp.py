@@ -10,7 +10,7 @@ from src.bridge.cctp import CircleCctpBridge
 async def test_cctp_quote_rejects_unsupported_pair():
     bridge = CircleCctpBridge()
     async with httpx.AsyncClient() as client:
-        q = await bridge.quote_usdc(client, "celo", "solana", 100.0)
+        q = await bridge.quote_usdc(client, "base", "solana", 100.0)
     assert not q.ok
     assert q.error == "unsupported pair"
 

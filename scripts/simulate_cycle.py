@@ -38,7 +38,7 @@ async def main() -> None:
         if args.all:
             sims = await simulate_all_routes(client, chains, token, cfg, args.size)
         else:
-            directions = list(ALL_DIRECTIONS) if not args.both else ["celo_to_solana", "solana_to_celo"]
+            directions = list(ALL_DIRECTIONS) if not args.both else ["base_to_solana", "solana_to_base"]
             if args.direction:
                 directions = [args.direction]
             sims = []

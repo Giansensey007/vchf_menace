@@ -12,14 +12,11 @@ ROUTE_PAIRS: tuple[tuple[str, str], ...] = (
     ("vnx", "base"),
     ("solana", "vnx"),
     ("vnx", "solana"),
-    ("ethereum", "vnx"),
-    ("vnx", "ethereum"),
 )
 
 BASE_SOL_DIRECTIONS: tuple[str, ...] = ("base_to_solana", "solana_to_base")
 VNX_SOL_DIRECTIONS: tuple[str, ...] = ("solana_to_vnx", "vnx_to_solana")
 BASE_VNX_DIRECTIONS: tuple[str, ...] = ("base_to_vnx", "vnx_to_base")
-ETH_VNX_DIRECTIONS: tuple[str, ...] = ("ethereum_to_vnx", "vnx_to_ethereum")
 
 
 @dataclass(frozen=True)
@@ -37,8 +34,6 @@ class RouteSpec:
             return "base_sol"
         if self.direction in VNX_SOL_DIRECTIONS:
             return "vnx_sol"
-        if self.direction in ETH_VNX_DIRECTIONS:
-            return "eth_vnx"
         return "base_vnx"
 
     @property
@@ -109,7 +104,7 @@ def active_routes(cfg: BotConfig | None = None) -> tuple[RouteSpec, ...]:
             routes.append(r)
         elif r.route_group == "vnx_sol" and cfg.enable_vnx_cctp_routes:
             routes.append(r)
-        elif r.route_group in ("base_vnx", "eth_vnx") and cfg.enable_vnx_arb_routes:
+        elif r.route_group == "base_vnx" and cfg.enable_vnx_arb_routes:
             routes.append(r)
     return tuple(routes)
 

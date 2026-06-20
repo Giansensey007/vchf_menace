@@ -8,8 +8,8 @@ import httpx
 from src.config_loader import BotConfig, ChainConfig, TokenConfig, load_bot_config
 from src.quotes.api_gate import stagger_delay_ms
 from src.scanner.routes import (
-    CELO_SOL_DIRECTIONS,
-    CELO_VNX_DIRECTIONS,
+    BASE_SOL_DIRECTIONS,
+    BASE_VNX_DIRECTIONS,
     VNX_SOL_DIRECTIONS,
     route_for_direction,
 )
@@ -33,9 +33,9 @@ class SelectionResult:
     """Outcome of parallel pre-execution route comparison."""
 
     opportunity: RouteGroupBest | None
-    celo_sol: RouteGroupBest | None
+    base_sol: RouteGroupBest | None
     vnx_sol: RouteGroupBest | None
-    celo_vnx: RouteGroupBest | None
+    base_vnx: RouteGroupBest | None
     reason: str
 
 
@@ -80,67 +80,67 @@ async def _best_in_group(
     return best
 
 
-def _pick_celo_sol_vs_vnx_sol(
-    celo_sol: RouteGroupBest | None,
+def _pick_base_sol_vs_vnx_sol(
+    base_sol: RouteGroupBest | None,
     vnx_sol: RouteGroupBest | None,
     cfg: BotConfig,
 ) -> tuple[RouteGroupBest | None, str]:
-    """Apply indirect-route premium when both celo↔sol and SOL↔platform qualify."""
+    """Apply indirect-route premium when both base↔sol and SOL↔platform qualify."""
     premium = cfg.indirect_route_premium_usd
-    cs_ok = celo_sol is not None
+    cs_ok = base_sol is not None
     vs_ok = vnx_sol is not None
 
     if not cs_ok and not vs_ok:
-        return None, "no profitable route in celo↔sol or SOL↔platform groups"
+        return None, "no profitable route in base↔sol or SOL↔platform groups"
 
     if cs_ok and not vs_ok:
-        return celo_sol, f"celo↔sol only ({celo_sol.direction} ${celo_sol.net_profit_usd:.2f})"
+        return base_sol, f"base↔sol only ({base_sol.direction} ${base_sol.net_profit_usd:.2f})"
 
     if vs_ok and not cs_ok:
         return vnx_sol, f"SOL↔platform only ({vnx_sol.direction} ${vnx_sol.net_profit_usd:.2f})"
 
-    assert celo_sol and vnx_sol
-    delta = vnx_sol.net_profit_usd - celo_sol.net_profit_usd
+    assert base_sol and vnx_sol
+    delta = vnx_sol.net_profit_usd - base_sol.net_profit_usd
     if delta >= premium:
         return (
             vnx_sol,
             f"indirect +${delta:.2f} ≥ ${premium:.0f} premium → {vnx_sol.direction}",
         )
     return (
-        celo_sol,
-        f"celo↔sol preferred (indirect +${delta:.2f} < ${premium:.0f} premium)",
+        base_sol,
+        f"base↔sol preferred (indirect +${delta:.2f} < ${premium:.0f} premium)",
     )
 
 
 def choose_execution(
-    celo_sol: RouteGroupBest | None,
+    base_sol: RouteGroupBest | None,
     vnx_sol: RouteGroupBest | None,
     cfg: BotConfig,
     *,
-    celo_vnx: RouteGroupBest | None = None,
+    base_vnx: RouteGroupBest | None = None,
 ) -> SelectionResult:
     """
     Parallel scan done — pick what to execute.
 
-    - celo↔sol vs SOL↔platform: indirect only if ≥ indirect_route_premium_usd better
-    - celo↔VNX (when enabled): wins if best profit among all scanned groups
+    - base↔sol vs SOL↔platform: indirect only if ≥ indirect_route_premium_usd better
+    - base↔VNX (when enabled): wins if best profit among all scanned groups
     """
-    cs_vs_winner, cs_vs_reason = _pick_celo_sol_vs_vnx_sol(celo_sol, vnx_sol, cfg)
+    cs_vs_winner, cs_vs_reason = _pick_base_sol_vs_vnx_sol(base_sol, vnx_sol, cfg)
 
     candidates: list[tuple[RouteGroupBest, str]] = []
     if cs_vs_winner:
         candidates.append((cs_vs_winner, cs_vs_reason))
-    if celo_vnx:
+    if base_vnx:
         candidates.append(
             (
-                celo_vnx,
-                f"celo↔VNX ({celo_vnx.direction} ${celo_vnx.net_profit_usd:.2f})",
+                base_vnx,
+                f"base↔VNX ({base_vnx.direction} ${base_vnx.net_profit_usd:.2f})",
             )
         )
 
     if not candidates:
         return SelectionResult(
-            None, celo_sol, vnx_sol, celo_vnx, "no profitable route in any enabled group"
+            None, base_sol, vnx_sol, base_vnx, "no profitable route in any enabled group"
         )
 
     winner, winner_reason = max(candidates, key=lambda item: item[0].net_profit_usd)
@@ -153,7 +153,7 @@ def choose_execution(
             f"${other.net_profit_usd:.2f}) — {winner_reason}"
         )
 
-    return SelectionResult(winner, celo_sol, vnx_sol, celo_vnx, reason)
+    return SelectionResult(winner, base_sol, vnx_sol, base_vnx, reason)
 
 
 async def select_execution_route(
@@ -165,21 +165,21 @@ async def select_execution_route(
     """Scan all enabled route groups with staggered API pacing, then apply selection rules."""
     cfg = cfg or load_bot_config()
 
-    cs_dirs = CELO_SOL_DIRECTIONS
+    cs_dirs = BASE_SOL_DIRECTIONS
     vs_dirs = VNX_SOL_DIRECTIONS if cfg.enable_vnx_cctp_routes else ()
-    cv_dirs = CELO_VNX_DIRECTIONS if cfg.enable_vnx_arb_routes else ()
+    cv_dirs = BASE_VNX_DIRECTIONS if cfg.enable_vnx_arb_routes else ()
 
-    celo_sol = await _best_in_group(client, chains, token, cfg, "celo_sol", cs_dirs)
+    base_sol = await _best_in_group(client, chains, token, cfg, "base_sol", cs_dirs)
     vnx_sol = None
     if vs_dirs:
         await stagger_delay_ms()
         vnx_sol = await _best_in_group(client, chains, token, cfg, "vnx_sol", vs_dirs)
-    celo_vnx = None
+    base_vnx = None
     if cv_dirs:
         await stagger_delay_ms()
-        celo_vnx = await _best_in_group(client, chains, token, cfg, "celo_vnx", cv_dirs)
+        base_vnx = await _best_in_group(client, chains, token, cfg, "base_vnx", cv_dirs)
 
-    result = choose_execution(celo_sol, vnx_sol, cfg, celo_vnx=celo_vnx)
+    result = choose_execution(base_sol, vnx_sol, cfg, base_vnx=base_vnx)
     if result.opportunity:
         logger.info(
             "Route selected: %s @ %.0f VCHF ($%.2f) — %s",

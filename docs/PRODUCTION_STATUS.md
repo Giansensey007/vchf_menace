@@ -2,7 +2,54 @@
 
 **Last verified:** 2026-06-20  
 **Mode:** `DRY_RUN=true` — live trading paused (funding limits)  
-**Template:** GBP Menace · **Bot token:** VCHF
+**Template:** VNXAU Menace (Base hub) · **Bot token:** VCHF
+
+## Railway pre-flight checklist
+
+Run these **before** first Railway deploy and again after funding, from a Railway shell or one-off job:
+
+```bash
+DRY_RUN=true python -m pytest tests/ -q
+DRY_RUN=true python scripts/execute_route_matrix.py --step verify-all
+```
+
+### Environment (Railway)
+
+| Item | Required | Notes |
+|------|----------|-------|
+| Volume at `/data` | Yes | SQLite + in-flight ledger + tx log + bridge queues |
+| `DB_PATH=/data/bot.db` | Yes | Dockerfile default; parent dir holds all persistent JSON/JSONL |
+| `DRY_RUN=true` | Yes until funded | Dockerfile default |
+| `.env` vars from `.env.example` | Yes | Never commit `.env` |
+| `RPC_BASE` paid endpoint | Recommended | Public Base RPC can rate-limit during swap quotes |
+| `RPC_SOLANA` paid endpoint | Strongly recommended | Helius / QuickNode — public RPC 429s in prod loop |
+| `JUPITER_API_KEY` | Recommended | 1 RPS free tier; keyless is 0.5 RPS |
+| `USE_KYBER_SWAP=true` | Recommended | KyberSwap on Base; Uniswap V3 fallback |
+| `SOL_RPC_MIN_INTERVAL_MS=800` | Yes on public RPC | 429 exponential backoff via `SOL_RPC_429_BACKOFF_SEC` |
+| VNX withdraw labels | Yes | `VNX_BASE_WITHDRAW_LABEL`, `VNX_SOL_WITHDRAW_LABEL`, `VNX_ETH_WITHDRAW_LABEL` |
+| Whitelisted hot wallets | Yes | Base, Solana, ETH addresses on VNX Platform |
+| VNX collision retry | Yes | `VNX_COLLISION_RETRY_MAX=3`, `VNX_COLLISION_BACKOFF_SEC=5` (shared GBP account) |
+
+### Code checks (critical — must PASS)
+
+| Check | Command step | Pass criteria |
+|-------|--------------|---------------|
+| Test suite | `pytest tests/ -q` | 0 failures |
+| CCTP claim worker | `verify-all` → `cctp_claim` | Queue drains; discover + claim OK |
+| Wormhole claim worker | `verify-all` → `wormhole_claim` | Queue drains |
+| Wormhole preflight | `verify-all` → `wormhole_preflight` | Base outbound sim OK |
+| Route simulations | `verify-all` → `route_simulations` | All 8 directions quote @ 31 VCHF |
+
+### In-flight tracking
+
+| File | Purpose |
+|------|---------|
+| `/data/in_flight.jsonl` | VNX withdraws/deposits, CCTP/Wormhole burns |
+| `/data/tx_log.jsonl` | Unified TX audit with explorer URLs |
+| `/data/cctp_queue.json` | CCTP claim queue |
+| `/data/wormhole_queue.json` | Wormhole VAA claim queue |
+
+Stale pending records >48h are auto-failed at `verify-all` startup.
 
 ## Test suite
 
@@ -21,7 +68,7 @@ Command: `DRY_RUN=true python scripts/execute_route_matrix.py --step verify-all`
 |-------|--------|-------|
 | `cctp_claim` | PASS | Queue empty; Sol RPC 429 retried with backoff |
 | `wormhole_claim` | PASS | Queue empty |
-| `wormhole_preflight` | PASS | Celo→Sol/ETH OK; ETH→Celo skipped (ETH USDT under probe) |
+| `wormhole_preflight` | PASS | Base→Sol/ETH OK; ETH→Base skipped (ETH USDT under probe) |
 | `route_simulations` | PASS | All 6 directions quote @ 31 VCHF |
 | `celo_swaps` | PASS | DRY_RUN buy/sell probes |
 
@@ -29,10 +76,10 @@ Command: `DRY_RUN=true python scripts/execute_route_matrix.py --step verify-all`
 
 | Direction | Active | Net @ 31 VCHF |
 |-----------|--------|---------------|
-| `celo_to_solana` | yes | ~-$2.05 |
-| `solana_to_celo` | yes | ~-$2.06 |
-| `celo_to_vnx` | yes | ~-$1.70 |
-| `vnx_to_celo` | yes | ~-$0.50 |
+| `base_to_solana` | yes | ~-$2.05 |
+| `solana_to_base` | yes | ~-$2.06 |
+| `base_to_vnx` | yes | ~-$1.70 |
+| `vnx_to_base` | yes | ~-$0.50 |
 | `solana_to_vnx` | yes | ~-$1.67 |
 | `vnx_to_solana` | yes | ~-$1.63 |
 
@@ -59,12 +106,12 @@ CCTP return path (`cctp_sol_usdc_to_vnx`) implemented in `ArbExecutor.run_cctp_u
 |-------|------|--------|-----|
 | VNX VCHF | 1.35 | 200 | +198.65 |
 | VNX USDC | 11.62 | 250 | +238.38 |
-| Celo USDT | 0.97 | 250 | +249.03 |
+| Base USDT | 0.97 | 250 | +249.03 |
 | Sol USDC | 0.23 | 250 | +249.77 |
 | ETH USDC | 0.30 | 50 | +49.70 |
 | ETH USDT | 0.53 | 50 | +49.47 |
 | ETH gas | 0.0035 | 0.015 | +0.01 |
-| CELO gas | 60.17 | 0.50 | OK |
+| BASE gas | 60.17 | 0.50 | OK |
 | SOL gas | 0.44 | 0.05 | OK |
 
 ### Route test minimum (31 VCHF matrix)
@@ -73,7 +120,7 @@ CCTP return path (`cctp_sol_usdc_to_vnx`) implemented in `ArbExecutor.run_cctp_u
 |-------|------|--------|-----|
 | VNX VCHF | 1.35 | 32 | +30.65 |
 | VNX USDC | 11.62 | 45 | +33.38 |
-| Celo USDT | 0.97 | 45 | +44.03 |
+| Base USDT | 0.97 | 45 | +44.03 |
 | Sol USDC | 0.23 | 45 | +44.77 |
 | ETH USDC | 0.30 | 3 | +2.70 |
 | ETH USDT | 0.53 | 5 | +4.47 |
@@ -84,7 +131,7 @@ Use `python scripts/rebalance_for_test.py` after funding to reach route-test min
 
 | Guard | Value | Enforced in |
 |-------|-------|-------------|
-| VCHF deposit min (CELO/SOL) | 5 VCHF cumulative | `src/vnx/deposits.py` |
+| VCHF deposit min (BASE/SOL) | 5 VCHF cumulative | `src/vnx/deposits.py` |
 | ETH USDC deposit min | 20 USDC cumulative | `src/vnx/deposits.py` |
 | Platform buy/sell min | 30 VCHF | `src/vnx/trading.py`, VNX `VCHF/USDC` |
 | `platform_vchf_only` | true | treasury + executor |
@@ -103,7 +150,7 @@ Use `python scripts/rebalance_for_test.py` after funding to reach route-test min
 | Solana RPC rate limiting | `SOL_RPC_MIN_INTERVAL_MS` + 429 backoff |
 | VNX collision handling (shared GBP account) | `VNX_COLLISION_RETRY_MAX=3` |
 | In-flight ledger (withdraw/deposit/CCTP/Wormhole) | Same as GBP Menace |
-| `run_live_vnx_celo_sol_route.py` | Present |
+| `run_live_vnx_base_sol_route.py` | Present |
 | `--size` on route matrix | Present (default 31 VCHF) |
 | `convert_platform_chf.py` | Present (CHF→USDC, min 30 USDC order) |
 | Entry point `src/main.py` | Poll loop, `DRY_RUN` default true |
@@ -111,18 +158,18 @@ Use `python scripts/rebalance_for_test.py` after funding to reach route-test min
 | `.env.example` | Complete (RPCs, rate limits, VNX, CCTP, Wormhole) |
 | `.env` local | Present; gitignored |
 
-## Target closed loop (Celo → Sol homing)
+## Target closed loop (Base → Sol homing)
 
-**Platform VCHF → CELO withdraw → sell VCHF/USDT → Wormhole USDT to Sol → buy VCHF (Jupiter) → deposit to platform**
+**Platform VCHF → BASE withdraw → sell VCHF/USDT → Wormhole USDT to Sol → buy VCHF (Jupiter) → deposit to platform**
 
 | Step | Route leg / script |
 |------|-------------------|
-| 1 | `vnx_to_celo` — withdraw VCHF, sell on Celo for USDT |
-| 2 | `wormhole_celo_to_sol_direct` — USDT Celo → Sol |
+| 1 | `vnx_to_base` — withdraw VCHF, sell on Base for USDT |
+| 2 | `wormhole_base_to_sol_direct` — USDT Base → Sol |
 | 3 | Jupiter USDC→VCHF (or USDT→USDC→VCHF if needed) |
 | 4 | `solana_to_vnx` — deposit VCHF to VNX |
 
-Script: `python scripts/run_live_vnx_celo_sol_route.py`  
+Script: `python scripts/run_live_vnx_base_sol_route.py`  
 Treasury `close_loop_always_return` + `consolidate_vchf_to_platform()` sweep idle on-chain VCHF back to platform after cycles.
 
 ## Known blockers before live
@@ -135,8 +182,8 @@ Treasury `close_loop_always_return` + `consolidate_vchf_to_platform()` sweep idl
 
 ## Go-live checklist
 
-1. Copy `.env.example` → `.env` (same CELO/SOL keys as GBP; separate VNX keys optional)
-2. Whitelist withdraw labels: `VNX_CELO_WITHDRAW_LABEL`, `VNX_SOL_WITHDRAW_LABEL`, `VNX_ETH_WITHDRAW_LABEL`
+1. Copy `.env.example` → `.env` (same BASE/SOL keys as GBP; separate VNX keys optional)
+2. Whitelist withdraw labels: `VNX_BASE_WITHDRAW_LABEL`, `VNX_SOL_WITHDRAW_LABEL`, `VNX_ETH_WITHDRAW_LABEL`
 3. Fund per `config/production.yaml`
 4. `DRY_RUN=true python -m pytest tests/ -q` → 156 passed
 5. `DRY_RUN=true python scripts/execute_route_matrix.py --step verify-all`
@@ -151,6 +198,6 @@ cd environment/VCHF_Menace
 DRY_RUN=true python -m pytest tests/ -q
 DRY_RUN=true python scripts/execute_route_matrix.py --step verify-all
 python scripts/rebalance_for_test.py   # fund for 31 VCHF matrix
-python scripts/run_live_vnx_celo_sol_route.py   # closed-loop live route
-python scripts/execute_route_matrix.py --step vnx_to_celo --size 31
+python scripts/run_live_vnx_base_sol_route.py   # closed-loop live route
+python scripts/execute_route_matrix.py --step vnx_to_base --size 31
 ```

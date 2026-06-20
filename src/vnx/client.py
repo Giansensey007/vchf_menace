@@ -11,7 +11,12 @@ import httpx
 
 from src.quotes.rate_limit import get_with_retry, post_with_retry
 from src.vnx.auth import auth_headers, canonical_vnx_body, ensure_public_key_env, sort_object_deep
-from src.vnx.collision import collision_backoff_sec, collision_retry_max, is_vnx_collision_error, vnx_error_message
+from src.vnx.collision import (
+    collision_backoff_sec,
+    collision_retry_max,
+    is_vnx_collision_error,
+    vnx_error_message,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +127,7 @@ class VnxClient:
         return await self._private_post("accountBalance", {})
 
     async def account_balance_resilient(self) -> dict[str, Any]:
+        """accountBalance with retry on shared-account invalid_nonce / contention."""
         last_resp: dict[str, Any] = {"result": "error", "error": {"message": "unknown"}}
         for attempt in range(collision_retry_max()):
             resp = await self.account_balance()
@@ -130,6 +136,12 @@ class VnxClient:
                 return resp
             last_resp = resp
             if is_vnx_collision_error(err) and attempt + 1 < collision_retry_max():
+                logger.warning(
+                    "VNX accountBalance contention (attempt %s/%s): %s",
+                    attempt + 1,
+                    collision_retry_max(),
+                    err,
+                )
                 await asyncio.sleep(collision_backoff_sec(attempt))
                 continue
             return resp

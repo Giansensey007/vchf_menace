@@ -32,18 +32,18 @@
 | Variable | Notes |
 |----------|-------|
 | `DRY_RUN` | `true` until funded + verify-all passes |
-| `CELO_PRIVATE_KEY` | Celo hot wallet |
+| `BASE_PRIVATE_KEY` | Base hot wallet |
 | `SOLANA_SECRET_KEY` | Solana hot wallet (base58) |
 | `SOLANA_PUBLIC_KEY` | Solana pubkey (withdraw whitelisting) |
 | `VNX_PRIVATE_KEY_B64` | VNX platform PEM (base64) |
 | `VNX_API_PUBLIC_KEY` | From VNX Platform → My Account |
-| `VNX_CELO_WITHDRAW_LABEL` | Whitelisted Celo withdraw label |
+| `VNX_BASE_WITHDRAW_LABEL` | Whitelisted Base withdraw label |
 | `VNX_SOL_WITHDRAW_LABEL` | Whitelisted Sol withdraw label |
 | `VNX_ETH_WITHDRAW_LABEL` | Whitelisted ETH USDC withdraw label |
-| `ENABLE_VNX_ARB_ROUTES` | `true` — celo↔vnx VCHF (hub USDT path) |
+| `ENABLE_VNX_ARB_ROUTES` | `true` — base↔vnx VCHF (hub USDT path) |
 | `ENABLE_VNX_CCTP_ROUTES` | `true` — SOL↔platform via Circle CCTP |
 | `MIN_TRADE_VCHF`, `MAX_TRADE_VCHF` | Deploy sizing: `200` / `2000` |
-| `RPC_CELO`, `RPC_SOLANA`, `RPC_ETHEREUM` | Mainnet RPCs — use paid Solana RPC in prod |
+| `RPC_BASE`, `RPC_SOLANA`, `RPC_ETHEREUM` | Mainnet RPCs — use paid Solana RPC in prod |
 | `SOL_RPC_MIN_INTERVAL_MS` | 800+ on public RPC; lower on Helius/QuickNode |
 | `DB_PATH` | Docker sets `/data/bot.db` — mount volume at `/data` |
 
@@ -51,7 +51,7 @@
 
 | Guard | Value | Where |
 |-------|-------|-------|
-| CELO/SOL VCHF deposit credit | 5 VCHF cumulative | `VNX_MIN_DEPOSIT_VCHF_*` |
+| BASE/SOL VCHF deposit credit | 5 VCHF cumulative | `VNX_MIN_DEPOSIT_VCHF_*` |
 | ETH USDC deposit credit | 20 USDC cumulative | `VNX_MIN_DEPOSIT_USDC_ETH` |
 | Platform buy/sell order | 30 VCHF | `src/vnx/trading.py` |
 
@@ -60,8 +60,8 @@
 `VNX_API_PUBLIC_KEY` must match **VNX Platform → My Account**. If
 `scripts/derive_vnx_public_key.py` gets HTTP 401, copy the public key from the UI.
 
-1. Whitelist Celo, Solana, and ETH hot wallet addresses on VNX
-2. Confirm VCHF deposit/withdraw for CELO and SOL; USDC for ETH
+1. Whitelist Base, Solana, and ETH hot wallet addresses on VNX
+2. Confirm VCHF deposit/withdraw for BASE and SOL; USDC for ETH
 3. Optional: top up CHF, then `python scripts/convert_platform_chf.py --execute`
 
 ## Local Docker

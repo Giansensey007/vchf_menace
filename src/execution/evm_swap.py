@@ -11,6 +11,12 @@ logger = logging.getLogger(__name__)
 USE_KYBER_SWAP = os.getenv("USE_KYBER_SWAP", "true").lower() in ("1", "true", "yes")
 
 
+def validate_swap_min_out(min_raw: int, *, label: str = "swap") -> str | None:
+    if min_raw <= 0:
+        return f"{label}: amount_out_min is zero"
+    return None
+
+
 def swap_tokens(
     executor,
     chain: ChainConfig,
