@@ -2,7 +2,7 @@
 
 **Last verified:** 2026-06-20  
 **Mode:** `DRY_RUN=true` — live trading paused (funding limits)  
-**Template:** VNXAU Menace (Base hub) · **Bot token:** VCHF
+**Topology:** Dual-hub Celo (USDT) + Base (USDC) · **Bot token:** VCHF · **Routes:** 10 directed
 
 ## Railway pre-flight checklist
 
@@ -56,7 +56,7 @@ Stale pending records >48h are auto-failed at `verify-all` startup.
 | Metric | Result |
 |--------|--------|
 | Command | `DRY_RUN=true python -m pytest tests/ -q` |
-| Pass / fail | **171 passed**, 0 failed |
+| Pass / fail | **192 passed**, 0 failed |
 | 10-iteration sanity | pytest every iter; audit every iter; verify-all on even iters (see table below) |
 
 ### 10-iteration validation (2026-06-20)
@@ -134,7 +134,8 @@ CCTP return path (`cctp_sol_usdc_to_vnx`) implemented in `ArbExecutor.run_cctp_u
 |-------|------|--------|-----|
 | VNX VCHF | 1.35 | 200 | +198.65 |
 | VNX USDC | 11.62 | 250 | +238.38 |
-| Base USDT | 0.97 | 250 | +249.03 |
+| Celo USDT | **12.98** | 250 | +237.02 (stranded — return via Wormhole Celo→ETH or route test) |
+| Base USDC | 0.00 | 250 | +250.00 |
 | Sol USDC | 0.23 | 250 | +249.77 |
 | ETH USDC | 0.30 | 50 | +49.70 |
 | ETH USDT | 0.53 | 50 | +49.47 |
@@ -148,7 +149,8 @@ CCTP return path (`cctp_sol_usdc_to_vnx`) implemented in `ArbExecutor.run_cctp_u
 |-------|------|--------|-----|
 | VNX VCHF | 1.35 | 32 | +30.65 |
 | VNX USDC | 11.62 | 45 | +33.38 |
-| Base USDT | 0.97 | 45 | +44.03 |
+| Celo USDT | 12.98 | 45 | OK for probes |
+| Base USDC | 0.00 | 45 | +45.00 |
 | Sol USDC | 0.23 | 45 | +44.77 |
 | ETH USDC | 0.30 | 3 | +2.70 |
 | ETH USDT | 0.53 | 5 | +4.47 |
@@ -209,14 +211,15 @@ Treasury `close_loop_always_return` + `consolidate_vchf_to_platform()` sweep idl
 2. **VNX API** — `queryWithdrawals` / `queryTransfers` return HTTP 403 (in-flight ledger + balance polling still work)
 3. **Paid Solana RPC** — public endpoint hits 429 during CCTP discover; set `RPC_SOLANA` to Helius/QuickNode for prod
 4. **Jupiter API key** — optional but reduces 429 on route sims (`JUPITER_API_KEY`)
-5. **On-chain probes** — re-run `verify-all` after funding; set `DRY_RUN=false` only when critical probes PASS
+5. **Stranded Celo USDT** — **12.98 USDT** on Celo hot wallet (from prior route tests); return via Wormhole Celo→ETH or consume in `celo_to_*` probes — not recovered automatically in `DRY_RUN`
+6. **On-chain probes** — re-run `verify-all` after funding; set `DRY_RUN=false` only when critical probes PASS
 
 ## Go-live checklist
 
 1. Copy `.env.example` → `.env` (same BASE/SOL keys as GBP; separate VNX keys optional)
 2. Whitelist withdraw labels: `VNX_BASE_WITHDRAW_LABEL`, `VNX_SOL_WITHDRAW_LABEL`, `VNX_ETH_WITHDRAW_LABEL`
 3. Fund per `config/production.yaml`
-4. `DRY_RUN=true python -m pytest tests/ -q` → 171 passed
+4. `DRY_RUN=true python -m pytest tests/ -q` → 192 passed
 5. `DRY_RUN=true python scripts/execute_route_matrix.py --step verify-all`
 6. Re-run until on-chain probes PASS
 7. Deploy to Railway per `DEPLOY.md`; mount `/data` volume

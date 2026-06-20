@@ -463,11 +463,53 @@ class InFlightLedger:
         active = self.active()
         if not active:
             return "in-flight: none"
-        parts = [
-            f"{r.kind} {r.quantity:.2f} {r.asset}→{r.blockchain} since={r.created_at[:19]}"
-            for r in active
-        ]
+        parts = []
+        for r in active:
+            tx = r.txids[0] if r.txids else ""
+            parts.append(
+                f"{r.kind} {r.quantity:.2f} {r.asset}→{r.blockchain}"
+                f" since={r.created_at[:19]} tx={tx}"
+            )
         return "in-flight: " + "; ".join(parts)
+
+    def format_audit_block(self) -> str:
+        lines = ["--- In-flight / pending ---"]
+        active = self.active()
+        if not active:
+            lines.append("  (none)")
+            return "\n".join(lines)
+
+        by_kind: dict[str, list[InFlightRecord]] = {}
+        for r in active:
+            by_kind.setdefault(r.kind, []).append(r)
+
+        vnx_w = by_kind.get(KIND_VNX_WITHDRAW, [])
+        if vnx_w:
+            celo_sum = sum(r.quantity for r in vnx_w if r.blockchain == "CELO")
+            base_sum = sum(r.quantity for r in vnx_w if r.blockchain == "BASE")
+            sol_sum = sum(r.quantity for r in vnx_w if r.blockchain == "SOL")
+            api_n = sum(1 for r in vnx_w if r.extra.get("source") == "vnx_api")
+            summary = f"  VNX withdraws: {len(vnx_w)} pending"
+            if celo_sum:
+                summary += f", CELO={celo_sum:.2f}"
+            if base_sum:
+                summary += f", BASE={base_sum:.2f}"
+            if sol_sum:
+                summary += f", SOL={sol_sum:.2f}"
+            if api_n:
+                summary += f" ({api_n} from API)"
+            lines.append(summary)
+
+        for kind in (KIND_VNX_WITHDRAW, KIND_VNX_DEPOSIT, KIND_CCTP_BURN, KIND_WORMHOLE_BURN):
+            for r in by_kind.get(kind, []):
+                tx = ", ".join(r.txids) if r.txids else "n/a"
+                dir_note = r.direction or r.destination or "n/a"
+                qty = f"{r.quantity:.4f}" if r.quantity > 0 else "n/a"
+                lines.append(
+                    f"  {r.kind}: {qty} {r.asset} chain={r.blockchain} "
+                    f"dir={dir_note} since={r.created_at[:19]} tx={tx}"
+                )
+        return "\n".join(lines)
 
 
 def format_treasury_balance_line(

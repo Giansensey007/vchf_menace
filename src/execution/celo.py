@@ -10,6 +10,7 @@ from src.config_loader import ChainConfig, is_dry_run
 from src.execution.celo_rpc import connect_celo_web3
 from src.execution.evm_swap import validate_swap_min_out
 from src.quotes.addresses import checksum
+from src.quotes.sync_throttle import retry_backoff_sec, sync_throttle
 
 logger = logging.getLogger(__name__)
 

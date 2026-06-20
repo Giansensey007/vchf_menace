@@ -174,3 +174,17 @@ async def test_bridge_skips_duplicate_withdraw_when_pending(ledger_path: Path, m
     assert result.success
     assert not withdraw_called
     assert "existing" in (result.withdraw_txids or [])
+
+
+def test_format_audit_block_shows_withdraw_summary(ledger_path: Path) -> None:
+    ledger = InFlightLedger("VCHF", ledger_path)
+    ledger.log_vnx_withdraw(9.55, "CELO", "celo-hot", "vnx_to_celo", txids=["w1"], baseline_celo_token=0.0)
+    block = ledger.format_audit_block()
+    assert "VNX withdraws: 1 pending" in block
+    assert "CELO=9.55" in block
+
+
+def test_format_audit_block_empty(ledger_path: Path) -> None:
+    ledger = InFlightLedger("VCHF", ledger_path)
+    block = ledger.format_audit_block()
+    assert "(none)" in block
