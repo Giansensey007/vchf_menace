@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from src.config_loader import BotConfig, is_dry_run, load_chains, load_tokens
 from src.treasury.in_flight import InFlightLedger, read_on_chain_token_balances
 from src.vnx.client import VnxClient
-from src.vnx.collision import collision_backoff_sec, collision_retry_max, is_vnx_collision_error
+from src.vnx.collision import collision_backoff_sec, collision_retry_max, is_vnx_collision_error, vnx_error_message
 from src.vnx.trading import _round_down, VCHF_USDC_QTY_DECIMALS
 from src.vnx.deposits import check_deposit_amount
 
@@ -135,7 +135,7 @@ class VnxBridge:
                         direction, quantity, "", dest_label, None, ["dry-run-withdraw"], True, True
                     )
 
-                balance = vnx.vchf_balance(await vnx.account_balance())
+                balance = vnx.vchf_balance(await vnx.account_balance_resilient())
                 withdraw_qty = _round_down(
                     min(quantity, balance - VCHF_WITHDRAW_FEE_BUFFER), VCHF_USDC_QTY_DECIMALS
                 )
@@ -230,7 +230,7 @@ class VnxBridge:
                     direction, quantity, deposit_address, dest_label, "dry-run", None, True, True
                 )
 
-            balance_before = vnx.vchf_balance(await vnx.account_balance())
+            balance_before = vnx.vchf_balance(await vnx.account_balance_resilient())
             deposit_tx = await deposit_tx_builder(deposit_address)
             if not deposit_tx:
                 return BridgeResult(
@@ -260,13 +260,19 @@ class VnxBridge:
                 await asyncio.sleep(self.cfg.vnx_bridge_poll_sec)
                 try:
                     bal_resp = await vnx.account_balance()
-                    poll_errors = 0
                 except Exception as exc:
                     poll_errors += 1
                     logger.warning("VNX balance poll failed (%s): %s", poll_errors, exc)
                     if poll_errors >= 3:
                         await asyncio.sleep(min(30, self.cfg.vnx_bridge_poll_sec))
                     continue
+                err_msg = vnx_error_message(bal_resp)
+                if err_msg:
+                    poll_errors += 1
+                    if is_vnx_collision_error(err_msg):
+                        await asyncio.sleep(collision_backoff_sec(min(poll_errors - 1, 2)))
+                    continue
+                poll_errors = 0
                 credited = vnx.vchf_balance(bal_resp)
                 if credited >= balance_before + quantity * 0.99:
                     break
@@ -294,7 +300,7 @@ class VnxBridge:
                     direction, quantity, deposit_address, dest_label, deposit_tx, None, False, True
                 )
 
-            balance = vnx.vchf_balance(await vnx.account_balance())
+            balance = vnx.vchf_balance(await vnx.account_balance_resilient())
             withdraw_qty = _round_down(
                 min(quantity, balance - VCHF_WITHDRAW_FEE_BUFFER), VCHF_USDC_QTY_DECIMALS
             )

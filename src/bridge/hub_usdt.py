@@ -18,7 +18,7 @@ def stable_amount_usdt(
 ) -> float:
     """Return human USDT-equivalent for a hub stable amount on `chain`."""
     human = float(to_human(amount_raw, chain.hub_decimals))
-    if chain_key == "celo":
+    if chain_key == "base":
         return human  # native USDT
     if chain.hub_stable == "USDT":
         return human
@@ -70,7 +70,7 @@ async def normalize_hub_to_usdt(
     amount_raw: int,
 ) -> float:
     """Convert any hub stable leg to USDT for cross-chain PnL."""
-    if chain_key == "celo":
+    if chain_key == "base":
         return float(to_human(amount_raw, chain.hub_decimals))
     if chain.hub_stable == "USDT":
         return float(to_human(amount_raw, chain.hub_decimals))
@@ -80,7 +80,7 @@ async def normalize_hub_to_usdt(
     return float(to_human(amount_raw, chain.hub_decimals))
 
 
-def usdt_raw_for_celo_buy(usdt_human: float) -> int:
+def usdt_raw_for_base_buy(usdt_human: float) -> int:
     return from_human(usdt_human, 6)
 
 

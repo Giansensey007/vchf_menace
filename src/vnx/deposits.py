@@ -9,7 +9,7 @@ def min_deposit_vchf(blockchain: str) -> float:
     """Minimum cumulative on-chain VCHF deposit before VNX credits (CELO/SOL)."""
     bc = blockchain.strip().upper()
     if bc == "CELO":
-        return float(os.getenv("VNX_MIN_DEPOSIT_VCHF_CELO", "5"))
+        return float(os.getenv("VNX_MIN_DEPOSIT_VCHF_BASE", "5"))
     if bc == "SOL":
         return float(os.getenv("VNX_MIN_DEPOSIT_VCHF_SOL", "5"))
     return 0.0

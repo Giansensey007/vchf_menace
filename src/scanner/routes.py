@@ -6,17 +6,20 @@ from src.config_loader import BotConfig, load_bot_config
 
 # Directed arb routes: buy VCHF on `buy`, sell VCHF on `sell`
 ROUTE_PAIRS: tuple[tuple[str, str], ...] = (
-    ("celo", "solana"),
-    ("solana", "celo"),
-    ("celo", "vnx"),
-    ("vnx", "celo"),
+    ("base", "solana"),
+    ("solana", "base"),
+    ("base", "vnx"),
+    ("vnx", "base"),
     ("solana", "vnx"),
     ("vnx", "solana"),
+    ("ethereum", "vnx"),
+    ("vnx", "ethereum"),
 )
 
-CELO_SOL_DIRECTIONS: tuple[str, ...] = ("celo_to_solana", "solana_to_celo")
+BASE_SOL_DIRECTIONS: tuple[str, ...] = ("base_to_solana", "solana_to_base")
 VNX_SOL_DIRECTIONS: tuple[str, ...] = ("solana_to_vnx", "vnx_to_solana")
-CELO_VNX_DIRECTIONS: tuple[str, ...] = ("celo_to_vnx", "vnx_to_celo")
+BASE_VNX_DIRECTIONS: tuple[str, ...] = ("base_to_vnx", "vnx_to_base")
+ETH_VNX_DIRECTIONS: tuple[str, ...] = ("ethereum_to_vnx", "vnx_to_ethereum")
 
 
 @dataclass(frozen=True)
@@ -30,20 +33,22 @@ class RouteSpec:
 
     @property
     def route_group(self) -> str:
-        if self.direction in CELO_SOL_DIRECTIONS:
-            return "celo_sol"
+        if self.direction in BASE_SOL_DIRECTIONS:
+            return "base_sol"
         if self.direction in VNX_SOL_DIRECTIONS:
             return "vnx_sol"
-        return "celo_vnx"
+        if self.direction in ETH_VNX_DIRECTIONS:
+            return "eth_vnx"
+        return "base_vnx"
 
     @property
     def needs_vchf_bridge(self) -> bool:
         chains = {self.buy_chain, self.sell_chain}
-        return chains == {"celo", "solana"} or "vnx" in chains
+        return chains == {"base", "solana"} or "vnx" in chains
 
     @property
     def needs_stable_bridge(self) -> bool:
-        return {self.buy_chain, self.sell_chain} == {"celo", "solana"}
+        return {self.buy_chain, self.sell_chain} == {"base", "solana"}
 
     @property
     def needs_cctp(self) -> bool:
@@ -56,8 +61,8 @@ class RouteSpec:
 
     @property
     def needs_vnx_usdc(self) -> bool:
-        """Celo↔vnx VCHF routes; USDC path is hub_eth.celo_usdt_to_vnx_usdc (Wormhole+swap)."""
-        return self.direction in CELO_VNX_DIRECTIONS
+        """Base↔vnx VCHF routes; USDC path is hub_eth.base_usdc_to_vnx_usdc (Wormhole+swap)."""
+        return self.direction in BASE_VNX_DIRECTIONS
 
     @property
     def bridge_from(self) -> str | None:
@@ -77,7 +82,7 @@ class RouteSpec:
             return self.sell_chain
         if self.sell_chain == "vnx":
             return None
-        if {self.buy_chain, self.sell_chain} == {"celo", "solana"}:
+        if {self.buy_chain, self.sell_chain} == {"base", "solana"}:
             return self.sell_chain
         return self.sell_chain
 
@@ -88,16 +93,23 @@ ALL_ROUTES: tuple[RouteSpec, ...] = tuple(
 
 ALL_DIRECTIONS: tuple[str, ...] = tuple(r.direction for r in ALL_ROUTES)
 
+# Six directed arb legs on Base / Sol / VNX (excludes ETH hub settlement pair).
+CORE_ARB_DIRECTIONS: tuple[str, ...] = (
+    *BASE_SOL_DIRECTIONS,
+    *BASE_VNX_DIRECTIONS,
+    *VNX_SOL_DIRECTIONS,
+)
+
 
 def active_routes(cfg: BotConfig | None = None) -> tuple[RouteSpec, ...]:
     cfg = cfg or load_bot_config()
     routes: list[RouteSpec] = []
     for r in ALL_ROUTES:
-        if r.route_group == "celo_sol":
+        if r.route_group == "base_sol":
             routes.append(r)
         elif r.route_group == "vnx_sol" and cfg.enable_vnx_cctp_routes:
             routes.append(r)
-        elif r.route_group == "celo_vnx" and cfg.enable_vnx_arb_routes:
+        elif r.route_group in ("base_vnx", "eth_vnx") and cfg.enable_vnx_arb_routes:
             routes.append(r)
     return tuple(routes)
 
@@ -117,12 +129,14 @@ def estimate_fees_usd(buy_chain: str, sell_chain: str, cfg: BotConfig) -> float:
     """Per-leg execution fees (CCTP is only on the USDC return path, not each VNX↔Sol leg)."""
     fees = 0.0
     direction = f"{buy_chain}_to_{sell_chain}"
-    if buy_chain == "celo" or sell_chain == "celo":
-        fees += cfg.celo_gas_usd_estimate * 2
+    if buy_chain == "base" or sell_chain == "base":
+        fees += cfg.base_gas_usd_estimate * 2
+    if buy_chain == "ethereum" or sell_chain == "ethereum":
+        fees += cfg.eth_gas_usd_estimate * 2
     if buy_chain == "solana" or sell_chain == "solana":
         fees += cfg.solana_fee_usd_estimate
     chains = {buy_chain, sell_chain}
-    if chains == {"celo", "solana"}:
+    if chains == {"base", "solana"}:
         fees += cfg.vnx_bridge_fee_usd
         fees += cfg.wormhole_bridge_fee_usd
     elif direction in VNX_SOL_DIRECTIONS:

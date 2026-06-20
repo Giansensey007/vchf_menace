@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Live route: Platform VCHF → CELO → USDT → Sol → VCHF → platform."""
+"""Live route: Platform VCHF → BASE → USDT → Sol → VCHF → platform."""
 from __future__ import annotations
 
 import asyncio
@@ -71,7 +71,7 @@ async def run_route() -> int:
     if TX_LOG_PATH.exists():
         TX_LOG_PATH.write_text("", encoding="utf-8")
 
-    _log("\n========== LIVE ROUTE: VNX → CELO → SOL → VNX ==========")
+    _log("\n========== LIVE ROUTE: VNX → BASE → SOL → VNX ==========")
     _log("=== BEFORE audit ===")
     await audit()
     before = await _platform_balances()
@@ -93,18 +93,18 @@ async def run_route() -> int:
         await step_cctp_claim()
         await step_wormhole_claim(max_rounds=20)
 
-        # Leg 1: withdraw VCHF → Celo, sell for USDT
-        _log(f"\n--- Leg 1: vnx_to_celo @ {size:.2f} VCHF ---")
-        prep1 = await treasury.prepare_for_direction("vnx_to_celo", size)
+        # Leg 1: withdraw VCHF → Base, sell for USDT
+        _log(f"\n--- Leg 1: vnx_to_base @ {size:.2f} VCHF ---")
+        prep1 = await treasury.prepare_for_direction("vnx_to_base", size)
         _log(f"  prep: ready={prep1.ready} size={prep1.size_vchf:.2f} notes={prep1.notes}")
         if not prep1.ready:
             _log(f"ABORT leg1: {prep1.notes}")
             return 1
         leg1_size = prep1.size_vchf
-        r1 = await ex.run_cycle(client, "vnx_to_celo", leg1_size, force_execute=True)
-        all_txs["vnx_to_celo"] = _collect_txs(r1)
-        results["vnx_to_celo"] = r1.state == CycleState.DONE
-        _log(f"  leg1 state={r1.state.value} txs={all_txs['vnx_to_celo']} err={r1.error}")
+        r1 = await ex.run_cycle(client, "vnx_to_base", leg1_size, force_execute=True)
+        all_txs["vnx_to_base"] = _collect_txs(r1)
+        results["vnx_to_base"] = r1.state == CycleState.DONE
+        _log(f"  leg1 state={r1.state.value} txs={all_txs['vnx_to_base']} err={r1.error}")
         if r1.state != CycleState.DONE:
             return 1
 
@@ -112,18 +112,18 @@ async def run_route() -> int:
         await step_cctp_claim()
         await audit()
 
-        # Leg 2: Celo USDT → Sol USDC (cross-chain arb)
-        _log(f"\n--- Leg 2: celo_to_solana @ {leg1_size:.2f} VCHF ---")
-        prep2 = await treasury.prepare_for_direction("celo_to_solana", leg1_size)
+        # Leg 2: Base USDT → Sol USDC (cross-chain arb)
+        _log(f"\n--- Leg 2: base_to_solana @ {leg1_size:.2f} VCHF ---")
+        prep2 = await treasury.prepare_for_direction("base_to_solana", leg1_size)
         _log(f"  prep: ready={prep2.ready} size={prep2.size_vchf:.2f} notes={prep2.notes}")
         if not prep2.ready:
             _log(f"ABORT leg2: {prep2.notes}")
             return 1
         leg2_size = prep2.size_vchf
-        r2 = await ex.run_cycle(client, "celo_to_solana", leg2_size, force_execute=True)
-        all_txs["celo_to_solana"] = _collect_txs(r2)
-        results["celo_to_solana"] = r2.state == CycleState.DONE
-        _log(f"  leg2 state={r2.state.value} txs={all_txs['celo_to_solana']} err={r2.error}")
+        r2 = await ex.run_cycle(client, "base_to_solana", leg2_size, force_execute=True)
+        all_txs["base_to_solana"] = _collect_txs(r2)
+        results["base_to_solana"] = r2.state == CycleState.DONE
+        _log(f"  leg2 state={r2.state.value} txs={all_txs['base_to_solana']} err={r2.error}")
         if r2.state != CycleState.DONE:
             return 1
 

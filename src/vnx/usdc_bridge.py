@@ -10,7 +10,7 @@ import httpx
 
 from src.config_loader import BotConfig, is_dry_run
 from src.vnx.client import VnxClient
-from src.vnx.collision import collision_backoff_sec, collision_retry_max, is_vnx_collision_error
+from src.vnx.collision import collision_backoff_sec, collision_retry_max, is_vnx_collision_error, vnx_error_message
 from src.vnx.deposits import check_usdc_deposit_amount
 
 logger = logging.getLogger(__name__)
@@ -90,7 +90,7 @@ class VnxUsdcBridge:
                 self.eth_blockchain,
             )
 
-            balance_before = vnx.usdc_balance(await vnx.account_balance())
+            balance_before = vnx.usdc_balance(await vnx.account_balance_resilient())
             deposit_tx = await deposit_tx_builder(deposit_address)
             if not deposit_tx:
                 return UsdcBridgeResult(
@@ -144,7 +144,7 @@ class VnxUsdcBridge:
             return UsdcBridgeResult(direction, quantity, "", label, None, None, is_dry_run(), False, "zero quantity")
 
         async with VnxClient() as vnx:
-            balance = vnx.usdc_balance(await vnx.account_balance())
+            balance = vnx.usdc_balance(await vnx.account_balance_resilient())
             withdraw_qty = _round_usdc(min(quantity, balance))
             if withdraw_qty < quantity * 0.95:
                 return UsdcBridgeResult(

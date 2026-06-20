@@ -16,7 +16,8 @@ ROOT = Path(__file__).resolve().parent.parent
 CONFIG_DIR = ROOT / "config"
 
 DEFAULT_RPC: dict[str, str] = {
-    "RPC_CELO": "https://forno.celo.org",
+    "RPC_BASE": "https://base.llamarpc.com",
+    "RPC_BASE": "https://base.llamarpc.com",
     "RPC_SOLANA": "https://api.mainnet-beta.solana.com",
     "RPC_ETHEREUM": "https://ethereum.publicnode.com",
 }
@@ -47,6 +48,7 @@ class ChainConfig:
     hub_decimals: int
     rpc_env: str
     chain_type: str = "evm"
+    kyber_slug: str | None = None
     quoter_v2: str | None = None
     swap_router: str | None = None
     pools: dict[str, Any] = field(default_factory=dict)
@@ -79,6 +81,7 @@ class BotConfig:
     peg_max: float
     vnx_bridge_poll_sec: int
     vnx_bridge_timeout_sec: int
+    base_gas_usd_estimate: float
     base_gas_usd_estimate: float
     solana_fee_usd_estimate: float
     vnx_bridge_fee_usd: float
@@ -214,10 +217,42 @@ def is_dry_run() -> bool:
     return os.getenv("DRY_RUN", "true").lower() in ("1", "true", "yes")
 
 
+def data_dir() -> Path:
+    d = ROOT / "data"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
 def db_path() -> Path:
     raw = os.getenv("DB_PATH", "data/bot.db")
     p = Path(raw)
     if not p.is_absolute():
         p = ROOT / p
     p.parent.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def data_dir() -> Path:
+    """Persistent state directory (parent of DB_PATH, e.g. /data on Railway)."""
+    override = os.getenv("DATA_DIR", "").strip()
+    if override:
+        p = Path(override)
+        if not p.is_absolute():
+            p = ROOT / p
+    else:
+        p = db_path().parent
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def data_dir() -> Path:
+    """Persistent state directory (parent of DB_PATH, e.g. /data on Railway)."""
+    override = os.getenv("DATA_DIR", "").strip()
+    if override:
+        p = Path(override)
+        if not p.is_absolute():
+            p = ROOT / p
+    else:
+        p = db_path().parent
+    p.mkdir(parents=True, exist_ok=True)
     return p

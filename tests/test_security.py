@@ -6,7 +6,7 @@ def test_no_secrets_in_gitignore():
     gi = (root / ".gitignore").read_text()
     assert ".env" in gi
     example = (root / ".env.example").read_text()
-    assert "YOUR_CELO_PRIVATE_KEY" in example
+    assert "YOUR_BASE_PRIVATE_KEY" in example
     assert "0x982c" not in example
 
 

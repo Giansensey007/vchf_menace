@@ -42,10 +42,10 @@ from src.bridge.hub_eth import (
 )
 from src.bridge.wormhole_queue import WormholeClaimQueue
 from src.config_loader import load_bot_config, load_chains, load_tokens, token_decimals
-from src.execution.base import BaseExecutor
+from src.execution.celo import CeloExecutor
 from src.execution.executor import ArbExecutor, CycleRecord, CycleState
 from src.execution.solana import SolanaExecutor
-from src.execution.tx_log import TX_LOG_PATH, log_platform_order, log_tx
+from src.execution.tx_log import log_platform_order, log_tx, tx_log_path
 from src.quotes.http_client import build_client
 from src.quotes.types import from_human, to_human
 from src.scanner.routes import active_directions
@@ -60,7 +60,7 @@ import os
 
 TEST_VCHF = 31.0
 _ROUTE_SIZE = TEST_VCHF  # overridden by --size CLI flag
-PROBE_VCHF = 5.0  # matches VNX_MIN_DEPOSIT_VCHF_CELO for Celo deposit routes
+PROBE_VCHF = 5.0  # matches VNX_MIN_DEPOSIT_VCHF_BASE for Celo deposit routes
 PROBE_USDC = 0.4  # minimum Sol USDC for DEX probe when balance < 5
 BASE_MIN_VCHF = 5.0  # VNX platform min cumulative deposit on BASE
 CCTP_USDC = 5.0
@@ -751,8 +751,8 @@ async def run_full_matrix() -> int:
     os.environ["ENABLE_VNX_CCTP_ROUTES"] = "true"
 
     _log("\n========== FULL CROSS-CHAIN MATRIX ==========")
-    if TX_LOG_PATH.exists():
-        TX_LOG_PATH.write_text("", encoding="utf-8")
+    if tx_log_path().exists():
+        tx_log_path().write_text("", encoding="utf-8")
 
     await step_cctp_claim()
     _log("\n=== Initial balance audit ===")
@@ -848,9 +848,9 @@ async def run_full_matrix() -> int:
         else:
             _log(f"  {'PASS' if v else 'FAIL'}  {k}")
 
-    if TX_LOG_PATH.exists():
-        _log(f"\n=== TX log ({TX_LOG_PATH}) ===")
-        for line in TX_LOG_PATH.read_text(encoding="utf-8").strip().splitlines():
+    if tx_log_path().exists():
+        _log(f"\n=== TX log ({tx_log_path()}) ===")
+        for line in tx_log_path().read_text(encoding="utf-8").strip().splitlines():
             row = json.loads(line)
             url = row.get("url") or ""
             _log(f"  {row.get('intent')} | {row.get('chain')} | {row.get('tx_hash')} {url}")
@@ -863,8 +863,8 @@ async def run_production() -> int:
     """Full production validation: rebalance, claim CCTP, run all routes in capital-efficient order."""
     os.environ["CCTP_RECONCILE_USDC"] = "0"
     _log("\n========== PRODUCTION ROUTE TEST ==========")
-    if TX_LOG_PATH.exists():
-        TX_LOG_PATH.write_text("", encoding="utf-8")
+    if tx_log_path().exists():
+        tx_log_path().write_text("", encoding="utf-8")
 
     await step_cctp_claim()
     _log("\n=== Rebalance for test ===")
@@ -910,9 +910,9 @@ async def run_production() -> int:
     for k, v in results.items():
         _log(f"  {'PASS' if v else 'FAIL/SKIP'}  {k}")
 
-    if TX_LOG_PATH.exists():
-        _log(f"\n=== TX log ({TX_LOG_PATH}) ===")
-        for line in TX_LOG_PATH.read_text(encoding="utf-8").strip().splitlines():
+    if tx_log_path().exists():
+        _log(f"\n=== TX log ({tx_log_path()}) ===")
+        for line in tx_log_path().read_text(encoding="utf-8").strip().splitlines():
             row = json.loads(line)
             url = row.get("url") or ""
             _log(f"  {row.get('intent')} | {row.get('chain')} | {row.get('tx_hash')} {url}")

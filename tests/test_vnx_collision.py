@@ -4,11 +4,11 @@ import os
 
 import pytest
 
-from src.vnx.collision import (
-    collision_backoff_sec,
-    collision_retry_max,
-    is_vnx_collision_error,
-)
+from src.vnx.collision import collision_backoff_sec, collision_retry_max, is_vnx_collision_error, vnx_error_message
+
+
+def test_collision_detects_invalid_nonce() -> None:
+    assert is_vnx_collision_error("invalid_nonce: request rejected")
 
 
 @pytest.mark.parametrize(
@@ -23,6 +23,10 @@ from src.vnx.collision import (
 )
 def test_is_vnx_collision_error_positive(msg: str) -> None:
     assert is_vnx_collision_error(msg)
+
+
+def test_collision_detects_invalid_nonce() -> None:
+    assert is_vnx_collision_error("invalid_nonce: request rejected")
 
 
 @pytest.mark.parametrize(

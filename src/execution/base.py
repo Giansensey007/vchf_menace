@@ -7,7 +7,7 @@ from eth_account import Account
 from web3 import Web3
 
 from src.config_loader import ChainConfig, is_dry_run
-from src.execution.celo_rpc import connect_celo_web3
+from src.execution.base_rpc import connect_base_web3
 from src.quotes.sync_throttle import retry_backoff_sec, sync_throttle
 from src.quotes.addresses import checksum
 
@@ -88,18 +88,18 @@ WORMHOLE_COMPLETE_ABI = [
 ]
 
 
-class CeloExecutor:
+class BaseExecutor:
     def __init__(self, chain: ChainConfig) -> None:
         self.chain = chain
-        pk = os.getenv("CELO_PRIVATE_KEY", "").strip()
+        pk = os.getenv("BASE_PRIVATE_KEY", "").strip()
         if not pk:
-            raise ValueError("CELO_PRIVATE_KEY not set")
+            raise ValueError("BASE_PRIVATE_KEY not set")
         self.account = Account.from_key(pk)
-        router = os.getenv("CELO_SWAP_ROUTER") or chain.swap_router
+        router = os.getenv("BASE_SWAP_ROUTER") or chain.swap_router
         if not router:
-            raise ValueError("CELO swap router not configured")
+            raise ValueError("BASE swap router not configured")
         self.router = checksum(router)
-        self.w3 = connect_celo_web3(chain.rpc_url)
+        self.w3 = connect_base_web3(chain.rpc_url)
 
     @property
     def address(self) -> str:
@@ -114,32 +114,32 @@ class CeloExecutor:
 
     def _build_and_send(self, tx: dict) -> str | None:
         if is_dry_run():
-            logger.info("[DRY_RUN] Celo tx to=%s data=%s", tx.get("to"), (tx.get("data") or "")[:20])
-            return "dry-run-celo-tx"
+            logger.info("[DRY_RUN] Base tx to=%s data=%s", tx.get("to"), (tx.get("data") or "")[:20])
+            return "dry-run-base-tx"
 
         import os
 
         max_attempts = int(os.getenv("TX_RETRY_MAX", "4"))
         for attempt in range(max_attempts):
             try:
-                sync_throttle("celo_rpc")
+                sync_throttle("base_rpc")
                 signed = self.account.sign_transaction(tx)
                 tx_hash = self.w3.eth.send_raw_transaction(signed.raw_transaction)
                 receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=180)
                 if receipt.status != 1:
-                    logger.error("Celo tx reverted: %s", tx_hash.hex())
+                    logger.error("Base tx reverted: %s", tx_hash.hex())
                     return None
                 return tx_hash.hex()
             except Exception as exc:
                 if attempt + 1 >= max_attempts:
-                    logger.error("Celo send failed: %s", exc)
+                    logger.error("Base send failed: %s", exc)
                     return None
-                logger.warning("Celo send failed (attempt %s/%s): %s", attempt + 1, max_attempts, exc)
+                logger.warning("Base send failed (attempt %s/%s): %s", attempt + 1, max_attempts, exc)
                 import time
 
                 time.sleep(retry_backoff_sec(attempt))
                 try:
-                    self.w3 = connect_celo_web3(self.chain.rpc_url)
+                    self.w3 = connect_base_web3(self.chain.rpc_url)
                 except Exception:
                     pass
         return None
@@ -150,7 +150,7 @@ class CeloExecutor:
         max_attempts = int(os.getenv("RPC_RETRY_MAX", "4"))
         for attempt in range(max_attempts):
             try:
-                sync_throttle("celo_rpc")
+                sync_throttle("base_rpc")
                 nonce = self.w3.eth.get_transaction_count(self.account.address, "pending")
                 base = {
                     "from": self.account.address,
@@ -173,12 +173,12 @@ class CeloExecutor:
             except Exception as exc:
                 if attempt + 1 >= max_attempts:
                     raise
-                logger.warning("Celo RPC read failed, reconnecting: %s", exc)
+                logger.warning("Base RPC read failed, reconnecting: %s", exc)
                 import time
 
                 time.sleep(retry_backoff_sec(attempt))
-                self.w3 = connect_celo_web3(self.chain.rpc_url)
-        raise RuntimeError("Celo RPC unreachable")
+                self.w3 = connect_base_web3(self.chain.rpc_url)
+        raise RuntimeError("Base RPC unreachable")
 
     def approve_if_needed(self, token: str, spender: str, amount: int) -> str | None:
         contract = self.w3.eth.contract(address=checksum(token), abi=ERC20_ABI)
@@ -228,7 +228,7 @@ class CeloExecutor:
             base = self._tx_base(fn)
         except RuntimeError as exc:
             if str(exc) == "wormhole-already-claimed":
-                logger.info("Wormhole transfer already completed on Celo")
+                logger.info("Wormhole transfer already completed on Base")
                 return "already-claimed"
             raise
         tx = fn.build_transaction(base)

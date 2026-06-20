@@ -92,7 +92,7 @@ async def _maybe_execute(
         f"tx={br.source_tx} err={br.error or '-'}"
     )
     if br.source_tx and not br.dry_run:
-        _log(f"  Celo: https://celoscan.io/tx/{br.source_tx}")
+        _log(f"  Celo: https://basescan.io/tx/{br.source_tx}")
     return br.success
 
 

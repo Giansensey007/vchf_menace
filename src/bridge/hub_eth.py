@@ -95,7 +95,7 @@ async def swap_eth_usdt_to_usdc(amount_usdt: float, *, slippage_bps: int = 50) -
 
 
 async def swap_eth_usdc_to_usdt(amount_usdc: float, *, slippage_bps: int = 50) -> dict:
-    """Swap Ethereum USDC → USDT before Wormhole initiate to Celo."""
+    """Swap Ethereum USDC → USDT before Wormhole initiate to Base."""
     chains = load_chains()
     wh = load_bridge_config()["wormhole"]
     eth = EthereumExecutor(chains["ethereum"])
@@ -114,7 +114,7 @@ async def swap_eth_usdc_to_usdt(amount_usdc: float, *, slippage_bps: int = 50) -
     }
 
 
-async def celo_usdt_to_vnx_usdc(
+async def base_usdc_to_vnx_usdc(
     client,
     amount_usdt: float,
     bot_cfg: BotConfig | None = None,
@@ -122,7 +122,7 @@ async def celo_usdt_to_vnx_usdc(
     slippage_bps: int | None = None,
 ) -> dict:
     """
-    CELO USDT → ETH USDT (Wormhole + redeem) → ETH USDC (Uniswap) → VNX platform deposit.
+    BASE USDT → ETH USDT (Wormhole + redeem) → ETH USDC (Uniswap) → VNX platform deposit.
     """
     from src.bridge.wormhole import WormholePortalBridge
 
@@ -130,15 +130,15 @@ async def celo_usdt_to_vnx_usdc(
     chains = load_chains()
     eth = EthereumExecutor(chains["ethereum"])
     slippage = slippage_bps if slippage_bps is not None else cfg.slippage_bps
-    wh = WormholePortalBridge(chains["celo"])
+    wh = WormholePortalBridge(chains["base"])
 
     br = await wh.bridge_usdt_with_redeem(
         client,
-        from_chain="celo",
+        from_chain="base",
         to_chain="ethereum",
         amount_usdt=amount_usdt,
         recipient=eth.address,
-        intent="celo_usdt_to_vnx",
+        intent="base_usdc_to_vnx",
     )
     if not br.success:
         return {"success": False, "stage": "wormhole", "wormhole": br, "error": br.error}
@@ -150,7 +150,7 @@ async def celo_usdt_to_vnx_usdc(
     usdc_out = swap.get("expected_usdc") or amount_usdt * 0.99
     dep_err = check_usdc_deposit_amount("ETH", usdc_out)
     if dep_err:
-        logger.error("Aborting CELO→VNX USDC deposit (post-swap %.2f USDC): %s", usdc_out, dep_err)
+        logger.error("Aborting BASE→VNX USDC deposit (post-swap %.2f USDC): %s", usdc_out, dep_err)
         return {
             "success": False,
             "stage": "deposit",
@@ -169,57 +169,57 @@ async def celo_usdt_to_vnx_usdc(
     }
 
 
-async def wormhole_celo_to_eth(client, amount_usdt: float) -> dict:
-    """CELO USDT → ETH USDT with automated VAA redeem."""
+async def wormhole_base_to_eth(client, amount_usdt: float) -> dict:
+    """BASE USDT → ETH USDT with automated VAA redeem."""
     from src.bridge.wormhole import WormholePortalBridge
 
     chains = load_chains()
     eth = EthereumExecutor(chains["ethereum"])
-    wh = WormholePortalBridge(chains["celo"])
+    wh = WormholePortalBridge(chains["base"])
     br = await wh.bridge_usdt_with_redeem(
         client,
-        from_chain="celo",
+        from_chain="base",
         to_chain="ethereum",
         amount_usdt=amount_usdt,
         recipient=eth.address,
-        intent="celo_to_ethereum_usdt",
+        intent="base_to_ethereum_usdt",
     )
     return {"success": br.success, "wormhole": br, "error": br.error}
 
 
-async def wormhole_eth_to_celo(client, amount_usdt: float) -> dict:
-    """ETH USDT → CELO USDT with automated VAA redeem."""
+async def wormhole_eth_to_base(client, amount_usdt: float) -> dict:
+    """ETH USDT → BASE USDT with automated VAA redeem."""
     from src.bridge.wormhole import WormholePortalBridge
 
     chains = load_chains()
-    celo = chains["celo"]
-    from src.execution.celo import CeloExecutor
+    base = chains["base"]
+    from src.execution.base import BaseExecutor
 
-    celo_exec = CeloExecutor(celo)
-    wh = WormholePortalBridge(celo)
+    base_exec = BaseExecutor(base)
+    wh = WormholePortalBridge(base)
     br = await wh.bridge_usdt_with_redeem(
         client,
         from_chain="ethereum",
-        to_chain="celo",
+        to_chain="base",
         amount_usdt=amount_usdt,
-        recipient=celo_exec.address,
-        intent="ethereum_to_celo_usdt",
+        recipient=base_exec.address,
+        intent="ethereum_to_base_usdc",
     )
     return {"success": br.success, "wormhole": br, "error": br.error}
 
 
-async def wormhole_eth_to_celo_via_usdc(client, amount_usdc: float, bot_cfg: BotConfig | None = None) -> dict:
-    """Platform/ETH USDC → USDT swap → Wormhole ETH→Celo USDT."""
+async def wormhole_eth_to_base_via_usdc(client, amount_usdc: float, bot_cfg: BotConfig | None = None) -> dict:
+    """Platform/ETH USDC → USDT swap → Wormhole ETH→Base USDT."""
     cfg = bot_cfg or load_bot_config()
     swap = await swap_eth_usdc_to_usdt(amount_usdc * 0.998, slippage_bps=cfg.slippage_bps)
     if not swap["success"]:
         return {"success": False, "stage": "swap", "error": swap.get("error")}
     usdt = swap.get("expected_usdt") or amount_usdc * 0.995
-    wh = await wormhole_eth_to_celo(client, usdt)
+    wh = await wormhole_eth_to_base(client, usdt)
     return {"success": wh["success"], "swap_tx": swap.get("tx"), "wormhole": wh.get("wormhole"), "error": wh.get("error")}
 
 
-async def celo_usdt_to_sol_usdc(
+async def base_usdc_to_sol_usdc(
     client,
     amount_usdt: float,
     bot_cfg: BotConfig | None = None,
@@ -227,21 +227,21 @@ async def celo_usdt_to_sol_usdc(
     slippage_bps: int | None = None,
 ) -> dict:
     """
-    CELO USDT → ETH USDT (Wormhole) → ETH USDC (Uniswap) → Sol USDC (Circle CCTP).
+    BASE USDT → ETH USDT (Wormhole) → ETH USDC (Uniswap) → Sol USDC (Circle CCTP).
 
-    Hub triangle leg for rebalancing Celo stable inventory to Solana without VCHF.
+    Hub triangle leg for rebalancing Base stable inventory to Solana without VCHF.
     """
     from src.bridge.cctp import CircleCctpBridge
 
     cfg = bot_cfg or load_bot_config()
     slippage = slippage_bps if slippage_bps is not None else cfg.slippage_bps
 
-    wh = await wormhole_celo_to_eth(client, amount_usdt)
+    wh = await wormhole_base_to_eth(client, amount_usdt)
     if not wh["success"]:
         return {
             "success": False,
-            "direction": "celo_usdt_to_sol_usdc",
-            "stage": "wormhole_celo_eth",
+            "direction": "base_usdc_to_sol_usdc",
+            "stage": "wormhole_base_eth",
             "wormhole": wh.get("wormhole"),
             "error": wh.get("error"),
         }
@@ -251,7 +251,7 @@ async def celo_usdt_to_sol_usdc(
     if not swap["success"]:
         return {
             "success": False,
-            "direction": "celo_usdt_to_sol_usdc",
+            "direction": "base_usdc_to_sol_usdc",
             "stage": "swap_eth_usdt_usdc",
             "wormhole": wh.get("wormhole"),
             "error": swap.get("error"),
@@ -262,7 +262,7 @@ async def celo_usdt_to_sol_usdc(
     cctp = await bridge.bridge_usdc_eth_to_sol(client, usdc_out)
     return {
         "success": cctp.success,
-        "direction": "celo_usdt_to_sol_usdc",
+        "direction": "base_usdc_to_sol_usdc",
         "stage": "cctp_eth_sol" if cctp.success else "cctp_eth_sol_pending",
         "wormhole": wh.get("wormhole"),
         "swap_tx": swap.get("tx"),
@@ -271,7 +271,7 @@ async def celo_usdt_to_sol_usdc(
     }
 
 
-async def sol_usdc_to_celo_usdt(
+async def sol_usdc_to_base_usdc(
     client,
     amount_usdc: float,
     bot_cfg: BotConfig | None = None,
@@ -279,9 +279,9 @@ async def sol_usdc_to_celo_usdt(
     slippage_bps: int | None = None,
 ) -> dict:
     """
-    Sol USDC → ETH USDC (CCTP) → ETH USDT (Uniswap) → CELO USDT (Wormhole).
+    Sol USDC → ETH USDC (CCTP) → ETH USDT (Uniswap) → BASE USDT (Wormhole).
 
-    Inverse hub triangle — Sol stable inventory back to Celo via Ethereum.
+    Inverse hub triangle — Sol stable inventory back to Base via Ethereum.
     """
     from src.bridge.cctp import CircleCctpBridge
 
@@ -293,7 +293,7 @@ async def sol_usdc_to_celo_usdt(
     if not cctp.success and not cctp.dest_tx:
         return {
             "success": False,
-            "direction": "sol_usdc_to_celo_usdt",
+            "direction": "sol_usdc_to_base_usdc",
             "stage": "cctp_sol_eth",
             "cctp": cctp,
             "error": cctp.error,
@@ -304,18 +304,18 @@ async def sol_usdc_to_celo_usdt(
     if not swap["success"]:
         return {
             "success": False,
-            "direction": "sol_usdc_to_celo_usdt",
+            "direction": "sol_usdc_to_base_usdc",
             "stage": "swap_eth_usdc_usdt",
             "cctp": cctp,
             "error": swap.get("error"),
         }
 
     usdt_out = swap.get("expected_usdt") or usdc_on_eth * 0.998
-    wh = await wormhole_eth_to_celo(client, usdt_out)
+    wh = await wormhole_eth_to_base(client, usdt_out)
     return {
         "success": wh["success"],
-        "direction": "sol_usdc_to_celo_usdt",
-        "stage": "wormhole_eth_celo" if wh["success"] else "wormhole_eth_celo_pending",
+        "direction": "sol_usdc_to_base_usdc",
+        "stage": "wormhole_eth_base" if wh["success"] else "wormhole_eth_base_pending",
         "cctp": cctp,
         "swap_tx": swap.get("tx"),
         "wormhole": wh.get("wormhole"),
@@ -330,7 +330,7 @@ async def eth_usdt_to_sol_usdc(
     *,
     slippage_bps: int | None = None,
 ) -> dict:
-    """ETH USDT → ETH USDC (Uniswap) → Sol USDC (CCTP). Completes CELO→ETH→SOL after Wormhole redeem."""
+    """ETH USDT → ETH USDC (Uniswap) → Sol USDC (CCTP). Completes BASE→ETH→SOL after Wormhole redeem."""
     from src.bridge.cctp import CircleCctpBridge
 
     cfg = bot_cfg or load_bot_config()
@@ -414,53 +414,53 @@ async def fund_sol_gas_from_usdc(
     }
 
 
-async def fund_celo_gas_from_usdc(
+async def fund_base_gas_from_usdc(
     client,
     amount_usdc: float = 10.0,
     bot_cfg: BotConfig | None = None,
 ) -> dict:
     """
-    ETH USDC → USDT → Wormhole → Celo USDT, then swap USDT → CELO on Celo.
+    ETH USDC → USDT → Wormhole → Base USDT, then swap USDT → BASE on Base.
 
-    Skips if native CELO already exceeds ~$10 equivalent (no USDT/CELO pool on Uniswap Celo).
+    Skips if native BASE already exceeds ~$10 equivalent (no USDT/BASE pool on Uniswap Base).
     """
-    from src.execution.celo import CeloExecutor
+    from src.execution.base import BaseExecutor
 
     cfg = bot_cfg or load_bot_config()
     chains = load_chains()
-    celo = CeloExecutor(chains["celo"])
-    celo_native = float(celo.w3.from_wei(celo.balance_native(), "ether"))
-    celo_usd = float(os.getenv("CELO_USD_ESTIMATE", "0.35"))
-    if celo_native * celo_usd >= amount_usdc * 0.9:
+    base = BaseExecutor(chains["base"])
+    base_native = float(base.w3.from_wei(base.balance_native(), "ether"))
+    base_usd = float(os.getenv("BASE_USD_ESTIMATE", "0.35"))
+    if base_native * base_usd >= amount_usdc * 0.9:
         return {
             "success": True,
             "skipped": True,
-            "reason": f"celo_native {celo_native:.2f} CELO already >= ${amount_usdc:.0f} gas target",
-            "celo_native": celo_native,
+            "reason": f"base_native {base_native:.2f} BASE already >= ${amount_usdc:.0f} gas target",
+            "base_native": base_native,
         }
 
-    wh = await wormhole_eth_to_celo_via_usdc(client, amount_usdc, cfg)
+    wh = await wormhole_eth_to_base_via_usdc(client, amount_usdc, cfg)
     if not wh["success"]:
         return {"success": False, "stage": "wormhole", "error": wh.get("error"), "wormhole": wh}
 
-    celo_erc20 = "0x471EcE3750Da23735093b24508Ea98577cD1679"
+    base_erc20 = "0x471EcE3750Da23735093b24508Ea98577cD1679"
     wh_cfg = load_bridge_config()["wormhole"]
-    usdt_token = wh_cfg["celo_usdt_wormhole_from_eth"]
+    usdt_token = wh_cfg["base_usdc_wormhole_from_eth"]
     amount_in = from_human(amount_usdc * 0.95, 6)
-    min_out = int(amount_usdc / celo_usd * 0.9 * 1e18)
+    min_out = int(amount_usdc / base_usd * 0.9 * 1e18)
     tx = None
     for fee in (500, 3000, 100):
-        tx = celo.swap_exact_input(usdt_token, celo_erc20, amount_in, min_out, fee=fee)
+        tx = base.swap_exact_input(usdt_token, base_erc20, amount_in, min_out, fee=fee)
         if tx:
             break
-    native_after = float(celo.w3.from_wei(celo.balance_native(), "ether"))
+    native_after = float(base.w3.from_wei(base.balance_native(), "ether"))
     return {
         "success": bool(tx),
         "skipped": False,
         "wormhole": wh,
         "swap_tx": tx,
-        "celo_native_after": native_after,
-        "error": None if tx else "celo USDT→CELO swap failed (no pool?)",
+        "base_native_after": native_after,
+        "error": None if tx else "base USDT→BASE swap failed (no pool?)",
     }
 
 
@@ -472,7 +472,7 @@ async def fund_all_chain_gas(
     bot_cfg: BotConfig | None = None,
 ) -> dict:
     """
-    Use platform USDC to fund ~$10 native gas on ETH, SOL, and CELO.
+    Use platform USDC to fund ~$10 native gas on ETH, SOL, and BASE.
 
     Withdraws ~3× amount (+ CCTP buffer) from VNX to ETH first.
     """
@@ -507,8 +507,8 @@ async def fund_all_chain_gas(
     sol_gas = await fund_sol_gas_from_usdc(client, amount_usdc_per_chain, slippage_bps=cfg.slippage_bps)
     results["steps"]["sol_gas"] = sol_gas
 
-    celo_gas = await fund_celo_gas_from_usdc(client, amount_usdc_per_chain, cfg)
-    results["steps"]["celo_gas"] = celo_gas
+    base_gas = await fund_base_gas_from_usdc(client, amount_usdc_per_chain, cfg)
+    results["steps"]["base_gas"] = base_gas
 
     results["success"] = all(
         s.get("success")
@@ -518,20 +518,20 @@ async def fund_all_chain_gas(
     return results
 
 
-async def wormhole_celo_to_sol_direct(client, amount_usdt: float) -> dict:
-    """CELO USDT → Sol USDT (Wormhole Portal, single hop — no ETH)."""
+async def wormhole_base_to_sol_direct(client, amount_usdt: float) -> dict:
+    """BASE USDT → Sol USDT (Wormhole Portal, single hop — no ETH)."""
     from src.bridge.wormhole import WormholePortalBridge
     from src.execution.solana import SolanaExecutor
 
     chains = load_chains()
     sol = SolanaExecutor(chains["solana"])
-    wh = WormholePortalBridge(chains["celo"])
+    wh = WormholePortalBridge(chains["base"])
     br = await wh.bridge_usdt_with_redeem(
         client,
-        from_chain="celo",
+        from_chain="base",
         to_chain="solana",
         amount_usdt=amount_usdt,
         recipient=sol.pubkey,
-        intent="celo_to_solana_usdt",
+        intent="base_to_solana_usdt",
     )
-    return {"success": br.success, "direction": "celo_to_solana_usdt", "wormhole": br, "error": br.error}
+    return {"success": br.success, "direction": "base_to_solana_usdt", "wormhole": br, "error": br.error}

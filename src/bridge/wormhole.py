@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from web3 import Web3
 
 from src.config_loader import ChainConfig, is_dry_run, load_bridge_config, load_chains
-from src.execution.celo import CeloExecutor, ERC20_ABI
+from src.execution.base import BaseExecutor, ERC20_ABI
 from src.execution.ethereum import EthereumExecutor
 from src.quotes.addresses import checksum
 
@@ -81,17 +81,17 @@ class WormholeBridgeResult:
 
 class WormholePortalBridge:
     """
-    Wormhole Portal Token Bridge for native USDT between Celo and Solana.
+    Wormhole Portal Token Bridge for native USDT between Base and Solana.
 
-    Security: 19 Guardian validators, 13/19 quorum (industry-standard; listed on Celo docs).
+    Security: 19 Guardian validators, 13/19 quorum (industry-standard; listed on Base docs).
     """
 
-    def __init__(self, celo_chain: ChainConfig) -> None:
-        self.celo_chain = celo_chain
+    def __init__(self, base_chain: ChainConfig) -> None:
+        self.base_chain = base_chain
         self.cfg = load_bridge_config()
         self.wh = self.cfg["wormhole"]
 
-    _SUPPORTED = frozenset({"celo", "solana", "ethereum"})
+    _SUPPORTED = frozenset({"base", "solana", "ethereum"})
 
     @staticmethod
     def _initiate_receipt_ok(w3, tx_hash: str) -> bool:
@@ -123,8 +123,8 @@ class WormholePortalBridge:
             return WormholeQuote(
                 "wormhole", amount_usdt, amount_usdt, 0, from_chain, to_chain, error="same chain"
             )
-        evm_pairs = {("celo", "ethereum"), ("ethereum", "celo"), ("celo", "solana")}
-        if (from_chain, to_chain) not in evm_pairs and from_chain != "celo":
+        evm_pairs = {("base", "ethereum"), ("ethereum", "base"), ("base", "solana")}
+        if (from_chain, to_chain) not in evm_pairs and from_chain != "base":
             return WormholeQuote(
                 "wormhole",
                 amount_usdt,
@@ -132,25 +132,25 @@ class WormholePortalBridge:
                 0,
                 from_chain,
                 to_chain,
-                error=f"USDT initiate from {from_chain} not supported (use celo or ethereum EVM)",
+                error=f"USDT initiate from {from_chain} not supported (use base or ethereum EVM)",
             )
         fee = float(self.wh.get("fee_usd_estimate", 0.5))
         out = max(0.0, amount_usdt - fee)
         return WormholeQuote("wormhole", amount_usdt, out, fee, from_chain, to_chain)
 
-    def simulate_celo_transfer_tokens(
+    def simulate_base_transfer_tokens(
         self,
         amount_usdt: float,
         dest_chain: str,
         recipient: str,
-        celo_exec: CeloExecutor | None = None,
+        base_exec: BaseExecutor | None = None,
     ) -> dict:
-        """eth_call + gas estimate for transferTokens on Celo (no broadcast)."""
+        """eth_call + gas estimate for transferTokens on Base (no broadcast)."""
         if dest_chain not in ("solana", "ethereum"):
             return {"ok": False, "error": f"unsupported dest {dest_chain}"}
         amount_raw = int(amount_usdt * 10**6)
-        token = checksum(self.wh["celo_usdt"])
-        bridge = checksum(self.wh["celo_token_bridge"])
+        token = checksum(self.wh["base_usdc"])
+        bridge = checksum(self.wh["base_token_bridge"])
         if dest_chain == "solana":
             recipient_b32 = _solana_address_to_bytes32(recipient)
             dest_chain_id = int(self.wh["solana_chain_id"])
@@ -158,7 +158,7 @@ class WormholePortalBridge:
             recipient_b32 = _evm_address_to_bytes32(recipient)
             dest_chain_id = int(self.wh["ethereum_chain_id"])
 
-        exec_ = celo_exec or CeloExecutor(self.celo_chain)
+        exec_ = base_exec or BaseExecutor(self.base_chain)
         w3 = exec_.w3
         contract = w3.eth.contract(address=bridge, abi=TOKEN_BRIDGE_ABI)
         nonce = int(time.time()) & 0xFFFFFFFF
@@ -185,7 +185,7 @@ class WormholePortalBridge:
         }
         if balance < amount_raw:
             out["ok"] = False
-            out["error"] = "insufficient USDT on Celo hot wallet"
+            out["error"] = "insufficient USDT on Base hot wallet"
             return out
         try:
             fn.call({"from": exec_.address, "value": 0})
@@ -214,15 +214,15 @@ class WormholePortalBridge:
     def simulate_eth_transfer_tokens(
         self,
         amount_usdt: float,
-        celo_recipient: str,
+        base_recipient: str,
         eth_exec: EthereumExecutor | None = None,
     ) -> dict:
-        """eth_call + gas estimate for ETH USDT → Celo via Wormhole (no broadcast)."""
+        """eth_call + gas estimate for ETH USDT → Base via Wormhole (no broadcast)."""
         amount_raw = int(amount_usdt * 10**6)
         token = checksum(self.wh["ethereum_usdt"])
         bridge = checksum(self.wh["ethereum_token_bridge"])
-        recipient_b32 = _evm_address_to_bytes32(celo_recipient)
-        dest_chain_id = int(self.wh["celo_chain_id"])
+        recipient_b32 = _evm_address_to_bytes32(base_recipient)
+        dest_chain_id = int(self.wh["base_chain_id"])
 
         exec_ = eth_exec or EthereumExecutor(load_chains()["ethereum"])
         w3 = exec_.w3
@@ -241,7 +241,7 @@ class WormholePortalBridge:
             exec_.address, bridge
         ).call()
         out: dict = {
-            "dest_chain": "celo",
+            "dest_chain": "base",
             "dest_chain_id": dest_chain_id,
             "amount_usdt": amount_usdt,
             "balance_usdt": balance / 10**6,
@@ -272,20 +272,20 @@ class WormholePortalBridge:
                 out["error"] = err
         return out
 
-    async def bridge_usdt_celo_to_solana(
+    async def bridge_usdt_base_to_solana(
         self,
         amount_usdt: float,
         solana_recipient: str,
-        celo_exec: CeloExecutor | None = None,
+        base_exec: BaseExecutor | None = None,
     ) -> WormholeBridgeResult:
-        direction = "celo_to_solana_usdt"
-        quote = self.quote_usdt("celo", "solana", amount_usdt)
+        direction = "base_to_solana_usdt"
+        quote = self.quote_usdt("base", "solana", amount_usdt)
         if not quote.ok:
             return WormholeBridgeResult(direction, amount_usdt, None, None, is_dry_run(), False, quote.error)
 
         amount_raw = int(amount_usdt * 10**6)
-        token = checksum(self.wh["celo_usdt"])
-        bridge = checksum(self.wh["celo_token_bridge"])
+        token = checksum(self.wh["base_usdc"])
+        bridge = checksum(self.wh["base_token_bridge"])
         recipient = _solana_address_to_bytes32(solana_recipient)
         dest_chain_id = int(self.wh["solana_chain_id"])
 
@@ -296,9 +296,9 @@ class WormholePortalBridge:
                 amount_usdt,
                 solana_recipient[:8],
             )
-            return WormholeBridgeResult(direction, amount_usdt, "dry-run-wormhole-celo", None, True, True)
+            return WormholeBridgeResult(direction, amount_usdt, "dry-run-wormhole-base", None, True, True)
 
-        exec_ = celo_exec or CeloExecutor(self.celo_chain)
+        exec_ = base_exec or BaseExecutor(self.base_chain)
         exec_.approve_if_needed(token, bridge, amount_raw)
 
         w3 = exec_.w3
@@ -315,7 +315,7 @@ class WormholePortalBridge:
 
         tx_hash = exec_._build_and_send(tx)
         if not tx_hash:
-            return WormholeBridgeResult(direction, amount_usdt, None, None, False, False, "celo transferTokens failed")
+            return WormholeBridgeResult(direction, amount_usdt, None, None, False, False, "base transferTokens failed")
         if not self._initiate_receipt_ok(w3, tx_hash):
             return WormholeBridgeResult(
                 direction,
@@ -324,26 +324,26 @@ class WormholePortalBridge:
                 None,
                 False,
                 False,
-                "Celo Wormhole initiate missing LogMessagePublished",
+                "Base Wormhole initiate missing LogMessagePublished",
             )
 
-        logger.info("Wormhole initiated on Celo: %s (redeem on Solana via VAA)", tx_hash)
+        logger.info("Wormhole initiated on Base: %s (redeem on Solana via VAA)", tx_hash)
         return WormholeBridgeResult(direction, amount_usdt, tx_hash, None, False, True)
 
-    async def bridge_usdt_celo_to_ethereum(
+    async def bridge_usdt_base_to_ethereum(
         self,
         amount_usdt: float,
         ethereum_recipient: str,
-        celo_exec: CeloExecutor | None = None,
+        base_exec: BaseExecutor | None = None,
     ) -> WormholeBridgeResult:
-        direction = "celo_to_ethereum_usdt"
-        quote = self.quote_usdt("celo", "ethereum", amount_usdt)
+        direction = "base_to_ethereum_usdt"
+        quote = self.quote_usdt("base", "ethereum", amount_usdt)
         if not quote.ok:
             return WormholeBridgeResult(direction, amount_usdt, None, None, is_dry_run(), False, quote.error)
 
         amount_raw = int(amount_usdt * 10**6)
-        token = checksum(self.wh["celo_usdt"])
-        bridge = checksum(self.wh["celo_token_bridge"])
+        token = checksum(self.wh["base_usdc"])
+        bridge = checksum(self.wh["base_token_bridge"])
         recipient = _evm_address_to_bytes32(ethereum_recipient)
         dest_chain_id = int(self.wh["ethereum_chain_id"])
 
@@ -354,9 +354,9 @@ class WormholePortalBridge:
                 amount_usdt,
                 ethereum_recipient[:10],
             )
-            return WormholeBridgeResult(direction, amount_usdt, "dry-run-wormhole-celo-eth", None, True, True)
+            return WormholeBridgeResult(direction, amount_usdt, "dry-run-wormhole-base-eth", None, True, True)
 
-        exec_ = celo_exec or CeloExecutor(self.celo_chain)
+        exec_ = base_exec or BaseExecutor(self.base_chain)
         exec_.approve_if_needed(token, bridge, amount_raw)
 
         w3 = exec_.w3
@@ -374,28 +374,28 @@ class WormholePortalBridge:
         tx_hash = exec_._build_and_send(tx)
         if not tx_hash:
             return WormholeBridgeResult(
-                direction, amount_usdt, None, None, False, False, "celo transferTokens to ETH failed"
+                direction, amount_usdt, None, None, False, False, "base transferTokens to ETH failed"
             )
 
-        logger.info("Wormhole initiated on Celo: %s (redeem on Ethereum via VAA)", tx_hash)
+        logger.info("Wormhole initiated on Base: %s (redeem on Ethereum via VAA)", tx_hash)
         return WormholeBridgeResult(direction, amount_usdt, tx_hash, None, False, True)
 
-    async def bridge_usdt_solana_to_celo(
+    async def bridge_usdt_solana_to_base(
         self,
         amount_usdt: float,
-        celo_recipient: str,
+        base_recipient: str,
     ) -> WormholeBridgeResult:
-        """Solana→Celo USDT via Wormhole (dry-run logs; live requires SPL + redeem flow)."""
-        direction = "solana_to_celo_usdt"
-        quote = self.quote_usdt("solana", "celo", amount_usdt)
+        """Solana→Base USDT via Wormhole (dry-run logs; live requires SPL + redeem flow)."""
+        direction = "solana_to_base_usdc"
+        quote = self.quote_usdt("solana", "base", amount_usdt)
         if not quote.ok:
             return WormholeBridgeResult(direction, amount_usdt, None, None, is_dry_run(), False, quote.error)
 
         if is_dry_run():
             logger.info(
-                "[DRY_RUN] Wormhole USDT Solana → Celo: %.4f USDT to %s",
+                "[DRY_RUN] Wormhole USDT Solana → Base: %.4f USDT to %s",
                 amount_usdt,
-                celo_recipient[:10],
+                base_recipient[:10],
             )
             return WormholeBridgeResult(direction, amount_usdt, "dry-run-wormhole-sol", None, True, True)
 
@@ -410,32 +410,32 @@ class WormholePortalBridge:
             "Solana Wormhole initiate: use scripts/wormhole_bridge.py or add TS helper",
         )
 
-    async def bridge_usdt_ethereum_to_celo(
+    async def bridge_usdt_ethereum_to_base(
         self,
         amount_usdt: float,
-        celo_recipient: str,
+        base_recipient: str,
         eth_exec: EthereumExecutor | None = None,
     ) -> WormholeBridgeResult:
-        """Ethereum USDT → Celo USDT via Wormhole Portal (initiate only; redeem via queue)."""
-        direction = "ethereum_to_celo_usdt"
-        quote = self.quote_usdt("ethereum", "celo", amount_usdt)
+        """Ethereum USDT → Base USDT via Wormhole Portal (initiate only; redeem via queue)."""
+        direction = "ethereum_to_base_usdc"
+        quote = self.quote_usdt("ethereum", "base", amount_usdt)
         if not quote.ok:
             return WormholeBridgeResult(direction, amount_usdt, None, None, is_dry_run(), False, quote.error)
 
         amount_raw = int(amount_usdt * 10**6)
         token = checksum(self.wh["ethereum_usdt"])
         bridge = checksum(self.wh["ethereum_token_bridge"])
-        recipient = _evm_address_to_bytes32(celo_recipient)
-        dest_chain_id = int(self.wh["celo_chain_id"])
+        recipient = _evm_address_to_bytes32(base_recipient)
+        dest_chain_id = int(self.wh["base_chain_id"])
 
         if is_dry_run():
             logger.info(
-                "[DRY_RUN] Wormhole USDT %s → Celo: %.4f USDT to %s",
+                "[DRY_RUN] Wormhole USDT %s → Base: %.4f USDT to %s",
                 direction,
                 amount_usdt,
-                celo_recipient[:10],
+                base_recipient[:10],
             )
-            return WormholeBridgeResult(direction, amount_usdt, "dry-run-wormhole-eth-celo", None, True, True)
+            return WormholeBridgeResult(direction, amount_usdt, "dry-run-wormhole-eth-base", None, True, True)
 
         exec_ = eth_exec or EthereumExecutor(load_chains()["ethereum"])
         tx_hash = exec_.transfer_tokens_wormhole(
@@ -459,7 +459,7 @@ class WormholePortalBridge:
                 False,
                 "ETH Wormhole initiate tx has no LogMessagePublished (likely insufficient USDT/gas)",
             )
-        logger.info("Wormhole initiated on ETH: %s (redeem on Celo via VAA)", tx_hash)
+        logger.info("Wormhole initiated on ETH: %s (redeem on Base via VAA)", tx_hash)
         return WormholeBridgeResult(direction, amount_usdt, tx_hash, None, False, True)
 
     async def bridge_usdt_with_redeem(
@@ -476,12 +476,12 @@ class WormholePortalBridge:
         from src.bridge.wormhole_queue import WormholeClaimQueue
         from src.config_loader import load_chains
 
-        if from_chain == "celo" and to_chain == "ethereum":
-            br = await self.bridge_usdt_celo_to_ethereum(amount_usdt, recipient)
-        elif from_chain == "celo" and to_chain == "solana":
-            br = await self.bridge_usdt_celo_to_solana(amount_usdt, recipient)
-        elif from_chain == "ethereum" and to_chain == "celo":
-            br = await self.bridge_usdt_ethereum_to_celo(amount_usdt, recipient)
+        if from_chain == "base" and to_chain == "ethereum":
+            br = await self.bridge_usdt_base_to_ethereum(amount_usdt, recipient)
+        elif from_chain == "base" and to_chain == "solana":
+            br = await self.bridge_usdt_base_to_solana(amount_usdt, recipient)
+        elif from_chain == "ethereum" and to_chain == "base":
+            br = await self.bridge_usdt_ethereum_to_base(amount_usdt, recipient)
         else:
             return WormholeBridgeResult(
                 f"{from_chain}_to_{to_chain}_usdt",

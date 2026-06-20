@@ -27,7 +27,7 @@ def _cfg(**overrides) -> BotConfig:
         peg_max=1.02,
         vnx_bridge_poll_sec=30,
         vnx_bridge_timeout_sec=3600,
-        celo_gas_usd_estimate=0.25,
+        base_gas_usd_estimate=0.25,
         solana_fee_usd_estimate=0.05,
         vnx_bridge_fee_usd=1.0,
         vnx_platform_fee_usd=0.5,

@@ -19,7 +19,7 @@ def celo_chain():
         hub_stable="USDT",
         hub_token="0x48065fbbe25f71c9282ddf5e1cd6d6a887483d5e",
         hub_decimals=6,
-        rpc_env="RPC_CELO",
+        rpc_env="RPC_BASE",
         quoter_v2="0x82825d0554fA07f7FC52Ab63c961F330fdEFa8E8",
     )
 

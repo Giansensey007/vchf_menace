@@ -5,9 +5,28 @@ import asyncio
 import httpx
 
 from src.config_loader import ChainConfig, TokenConfig, token_decimals
-from src.quotes import jupiter, onchain, vnx
+from src.quotes import jupiter, kyber, onchain, vnx
 from src.quotes.api_gate import api_sync
 from src.quotes.types import ProviderQuote, QuoteResult
+
+
+async def _evm_quotes(
+    client: httpx.AsyncClient,
+    chain: ChainConfig,
+    token_in: str,
+    token_out: str,
+    amount_in: int,
+    token_symbol: str,
+) -> list[ProviderQuote]:
+    providers: list[ProviderQuote] = []
+    kyber_q = await kyber.quote(client, chain, token_in, token_out, amount_in)
+    providers.append(kyber_q)
+    if not kyber_q.ok:
+        pool_quotes = await asyncio.to_thread(
+            onchain.quote_onchain_pools, chain, token_in, token_out, amount_in, token_symbol
+        )
+        providers.extend(pool_quotes)
+    return providers
 
 
 async def quote_best(
@@ -23,8 +42,11 @@ async def quote_best(
     if amount_in <= 0:
         return None
 
-    if chain.quote_tier == "onchain":
-        await api_sync("celo_rpc")
+    if chain.quote_tier == "aggregator":
+        await api_sync("kyber")
+        providers = await _evm_quotes(client, chain, token_in, token_out, amount_in, token_symbol)
+    elif chain.quote_tier == "onchain":
+        await api_sync("base_rpc")
         providers = await asyncio.to_thread(
             onchain.quote_onchain_pools, chain, token_in, token_out, amount_in, token_symbol
         )

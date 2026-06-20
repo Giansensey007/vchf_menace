@@ -71,7 +71,7 @@ Test phases (this script):
 
 Do NOT fund Ethereum USDC for VNX — platform USDC arb routes are off.
 """.format(
-            celo=celo_addr or "(set CELO_PRIVATE_KEY)",
+            celo=celo_addr or "(set BASE_PRIVATE_KEY)",
             sol=sol_addr or "(set SOLANA_SECRET_KEY)",
             vnx_min=VNX_BRIDGE_MIN_VCHF,
         )

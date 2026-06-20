@@ -13,15 +13,14 @@ from typing import Any
 import httpx
 
 from src.bridge.wormhole_vaa import fetch_signed_vaa, fetch_vaa_by_tx_hash, token_bridge_emitter
-from src.config_loader import data_dir, is_dry_run, load_bridge_config, load_chains
+from src.config_loader import ROOT, is_dry_run, load_bridge_config, load_chains
 from src.execution.base import BaseExecutor
 from src.execution.ethereum import EthereumExecutor
 from src.execution.tx_log import log_tx
 
 logger = logging.getLogger(__name__)
 
-def wormhole_queue_path() -> Path:
-    return data_dir() / "wormhole_queue.json"
+QUEUE_PATH = ROOT / "data" / "wormhole_queue.json"
 
 
 class WormholeQueueStatus(str, Enum):
@@ -72,7 +71,7 @@ class WormholeClaimQueue:
     """Track Wormhole Portal initiates awaiting VAA + completeTransfer on destination."""
 
     def __init__(self, path: Path | None = None) -> None:
-        self.path = path or wormhole_queue_path()
+        self.path = path or QUEUE_PATH
         self.cfg = load_bridge_config()["wormhole"]
         self._store = self.load()
 
@@ -195,12 +194,12 @@ class WormholeClaimQueue:
                 item.status = WormholeQueueStatus.CLAIMED.value
                 if dest_tx != "already-claimed":
                     log_tx(item.intent, item.dest_chain, dest_tx)
-                if item.dest_chain == "celo" and "eth" in item.source_chain:
-                    from src.bridge.base_usdc import consolidate_after_eth_to_celo_redeem
+                if item.dest_chain == "base" and "eth" in item.source_chain:
+                    from src.bridge.base_usdc import consolidate_after_eth_to_base_redeem
 
-                    con = await consolidate_after_eth_to_celo_redeem()
+                    con = await consolidate_after_eth_to_base_redeem()
                     if con.get("success") and not con.get("skipped"):
-                        logger.info("Auto-consolidated wrapped USDT → canonical on Celo")
+                        logger.info("Auto-consolidated wrapped USDT → canonical on Base")
                 return True
             item.status = WormholeQueueStatus.READY.value
             return False
@@ -239,7 +238,7 @@ class WormholeClaimQueue:
         chains = load_chains()
         tx = item.source_tx if item.source_tx.startswith("0x") else f"0x{item.source_tx}"
         try:
-            if item.source_chain == "celo":
+            if item.source_chain == "base":
                 exec_ = BaseExecutor(chains["base"])
                 return WormholePortalBridge._initiate_receipt_ok(exec_.w3, tx)
             if item.source_chain == "ethereum":
@@ -256,7 +255,7 @@ class WormholeClaimQueue:
         chains = load_chains()
         tx = item.source_tx if item.source_tx.startswith("0x") else f"0x{item.source_tx}"
         try:
-            if item.source_chain == "celo":
+            if item.source_chain == "base":
                 from src.execution.base import BaseExecutor
 
                 exec_ = BaseExecutor(chains["base"])
@@ -289,7 +288,7 @@ class WormholeClaimQueue:
             eth = EthereumExecutor(chains["ethereum"])
             bridge = self.cfg.get("ethereum_token_bridge") or ""
             return eth.complete_transfer_wormhole(bridge, vaa)
-        if item.dest_chain == "celo":
+        if item.dest_chain == "base":
             base = BaseExecutor(chains["base"])
             bridge = self.cfg["base_token_bridge"]
             return base.complete_transfer_wormhole(bridge, vaa)
@@ -298,7 +297,7 @@ class WormholeClaimQueue:
     @staticmethod
     def emitter_for_chain(chain: str) -> str:
         wh = load_bridge_config()["wormhole"]
-        if chain == "celo":
+        if chain == "base":
             return token_bridge_emitter(wh["base_token_bridge"])
         if chain == "ethereum":
             return token_bridge_emitter(wh["ethereum_token_bridge"])

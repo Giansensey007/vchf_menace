@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-# Substrings indicating VNX platform contention (GBP + VCHF share one account).
+# Substrings indicating VNX platform contention (GBP + VCHF + VCHF share one account).
 _COLLISION_MARKERS: tuple[str, ...] = (
     "invalid_nonce",
     "invalid nonce",

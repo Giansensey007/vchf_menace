@@ -15,8 +15,26 @@ logger = logging.getLogger(__name__)
 def tx_log_path() -> Path:
     return data_dir() / "tx_log.jsonl"
 
+class _LazyTxLogPath:
+    def _path(self) -> Path:
+        return tx_log_path()
+    def exists(self) -> bool:
+        return self._path().exists()
+    def write_text(self, *a, **k):
+        return self._path().write_text(*a, **k)
+    def read_text(self, *a, **k):
+        return self._path().read_text(*a, **k)
+    def open(self, *a, **k):
+        return self._path().open(*a, **k)
+    def __str__(self) -> str:
+        return str(self._path())
+    def __repr__(self) -> str:
+        return repr(self._path())
+TX_LOG_PATH = _LazyTxLogPath()
+
 EXPLORERS: dict[str, str] = {
     "base": "https://basescan.org/tx/{tx}",
+    "celo": "https://basescan.io/tx/{tx}",
     "ethereum": "https://etherscan.io/tx/{tx}",
     "eth": "https://etherscan.io/tx/{tx}",
     "solana": "https://solscan.io/tx/{tx}",
