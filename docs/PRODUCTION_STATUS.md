@@ -38,7 +38,7 @@ DRY_RUN=true python scripts/execute_route_matrix.py --step verify-all
 | CCTP claim worker | `verify-all` → `cctp_claim` | Queue drains; discover + claim OK |
 | Wormhole claim worker | `verify-all` → `wormhole_claim` | Queue drains |
 | Wormhole preflight | `verify-all` → `wormhole_preflight` | Base outbound sim OK |
-| Route simulations | `verify-all` → `route_simulations` | All 6 directions quote @ 31 VCHF |
+| Route simulations | `verify-all` → `route_simulations` | All 10 directions quote @ 31 VCHF |
 
 ### In-flight tracking
 
@@ -56,7 +56,8 @@ Stale pending records >48h are auto-failed at `verify-all` startup.
 | Metric | Result |
 |--------|--------|
 | Command | `DRY_RUN=true python -m pytest tests/ -q` |
-| Pass / fail | **156 passed**, 0 failed |
+| Pass / fail | **171 passed**, 0 failed |
+| 10-iteration sanity | pytest every iter; audit + verify-all on even iters (iters 5–10 clean) |
 
 ## Route matrix (`verify-all`)
 
@@ -68,14 +69,19 @@ Command: `DRY_RUN=true python scripts/execute_route_matrix.py --step verify-all`
 |-------|--------|-------|
 | `cctp_claim` | PASS | Queue empty; Sol RPC 429 retried with backoff |
 | `wormhole_claim` | PASS | Queue empty |
-| `wormhole_preflight` | PASS | Base→Sol/ETH OK; ETH→Base skipped (ETH USDT under probe) |
-| `route_simulations` | PASS | All 6 directions quote @ 31 VCHF |
-| `celo_swaps` | PASS | DRY_RUN buy/sell probes |
+| `wormhole_preflight` | PASS | Base→Sol/ETH OK |
+| `route_simulations` | PASS | All 10 directions quote @ 31 VCHF |
+| `base_swaps` | PASS | DRY_RUN Kyber/Uniswap buy/sell probes on Base |
+| `celo_swaps` | PASS | DRY_RUN legacy Celo buy/sell probes |
 
 ### Route simulations @ 31 VCHF (quotes only)
 
 | Direction | Active | Net @ 31 VCHF |
 |-----------|--------|---------------|
+| `celo_to_solana` | yes | quotes OK (legacy Celo hub) |
+| `solana_to_celo` | yes | quotes OK (legacy Celo hub) |
+| `celo_to_vnx` | yes | quotes OK |
+| `vnx_to_celo` | yes | quotes OK |
 | `base_to_solana` | yes | ~-$2.05 |
 | `solana_to_base` | yes | ~-$2.06 |
 | `base_to_vnx` | yes | ~-$1.70 |
@@ -143,9 +149,11 @@ Use `python scripts/rebalance_for_test.py` after funding to reach route-test min
 
 | Area | Status |
 |------|--------|
-| 6 arb directions in executor | Implemented |
+| 10 arb directions (dual EVM: Celo + Base) | Implemented |
+| Base execution (`BaseExecutor`, KyberSwap, `base_usdc.py`) | Implemented |
+| Celo execution (legacy hub, `celo.py`) | Implemented |
 | CCTP Sol→ETH→VNX return | Implemented |
-| Wormhole hub legs (Celo↔ETH↔Sol USDT) | Implemented + matrix steps |
+| Wormhole hub legs (Base/Celo↔ETH↔Sol USDT) | Implemented + matrix steps |
 | Min deposit guards (5 VCHF, 20 ETH USDC, 30 VCHF order) | Enforced |
 | Solana RPC rate limiting | `SOL_RPC_MIN_INTERVAL_MS` + 429 backoff |
 | VNX collision handling (shared GBP account) | `VNX_COLLISION_RETRY_MAX=3` |
@@ -155,7 +163,7 @@ Use `python scripts/rebalance_for_test.py` after funding to reach route-test min
 | `convert_platform_chf.py` | Present (CHF→USDC, min 30 USDC order) |
 | Entry point `src/main.py` | Poll loop, `DRY_RUN` default true |
 | Docker `/data` volume | `DB_PATH=/data/bot.db` |
-| `.env.example` | Complete (RPCs, rate limits, VNX, CCTP, Wormhole) |
+| `.env.example` | Complete (RPCs, rate limits, VNX, CCTP, Wormhole, Base keys) |
 | `.env` local | Present; gitignored |
 
 ## Target closed loop (Base → Sol homing)
@@ -185,7 +193,7 @@ Treasury `close_loop_always_return` + `consolidate_vchf_to_platform()` sweep idl
 1. Copy `.env.example` → `.env` (same BASE/SOL keys as GBP; separate VNX keys optional)
 2. Whitelist withdraw labels: `VNX_BASE_WITHDRAW_LABEL`, `VNX_SOL_WITHDRAW_LABEL`, `VNX_ETH_WITHDRAW_LABEL`
 3. Fund per `config/production.yaml`
-4. `DRY_RUN=true python -m pytest tests/ -q` → 156 passed
+4. `DRY_RUN=true python -m pytest tests/ -q` → 171 passed
 5. `DRY_RUN=true python scripts/execute_route_matrix.py --step verify-all`
 6. Re-run until on-chain probes PASS
 7. Deploy to Railway per `DEPLOY.md`; mount `/data` volume
