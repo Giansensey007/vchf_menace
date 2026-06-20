@@ -14,7 +14,12 @@
    DRY_RUN=true python -m pytest tests/ -q
    ```
 7. Fund to `config/production.yaml` targets — see `docs/PRODUCTION_STATUS.md`
-8. Re-run `verify-all`; optional live probes:
+8. **Infinite ERC20 approvals** (once per funded wallet):
+   ```bash
+   python scripts/approve_all.py
+   # or set AUTO_APPROVE_ON_STARTUP=true in Railway env
+   ```
+9. Re-run `verify-all`; optional live probes:
    `DRY_RUN=false python scripts/test_probe_trades.py --execute` (5 VCHF / ~$5 legs)
 9. Set `DRY_RUN=false` and run deploy bot: `python -m src.main` (200–2000 VCHF sizing)
 

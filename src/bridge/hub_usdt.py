@@ -1,3 +1,10 @@
+"""Hub stable normalization — Celo USDT vs ETH/Sol USDC.
+
+VNX platform credits USDC on Ethereum mainnet only (see src.vnx.constants).
+Celo pools and Wormhole Celo legs use USDT; never deposit ETH USDT to VNX —
+swap USDT→USDC on ETH (Uniswap) or route via CCTP USDC before eth_to_vnx.
+"""
+
 from __future__ import annotations
 
 import logging
@@ -7,8 +14,26 @@ import httpx
 from src.config_loader import ChainConfig, load_bridge_config
 from src.quotes import jupiter
 from src.quotes.types import from_human, to_human
+from src.vnx.constants import CELO_HUB_STABLE, check_vnx_eth_deposit_asset
 
 logger = logging.getLogger(__name__)
+
+
+def guard_hub_stable_for_vnx_path(chain_key: str, hub_stable: str, *, operation: str) -> str | None:
+    """Log and return error when hub stable mismatches VNX ETH deposit rules."""
+    if chain_key == "ethereum":
+        err = check_vnx_eth_deposit_asset(hub_stable, "ETH")
+        if err:
+            logger.error("%s: %s", operation, err)
+        return err
+    if chain_key == "celo" and hub_stable.strip().upper() != CELO_HUB_STABLE:
+        err = (
+            f"{operation}: Celo hub_stable must be {CELO_HUB_STABLE} for DEX/Wormhole "
+            f"(got {hub_stable})"
+        )
+        logger.warning(err)
+        return err
+    return None
 
 
 def stable_amount_usdt(

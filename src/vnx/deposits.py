@@ -3,10 +3,7 @@ from __future__ import annotations
 import os
 
 from src.vnx.constants import (
-    CELO_HUB_STABLE,
-    ETH_HUB_STABLE,
     VNX_ETH_DEPOSIT_ASSET,
-    check_eth_hub_stable_for_vnx,
     check_vnx_eth_deposit_asset,
 )
 

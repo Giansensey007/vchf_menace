@@ -7,7 +7,8 @@ from src.config_loader import BotConfig, load_bot_config, load_bridge_config, lo
 from src.execution.ethereum import EthereumExecutor
 from src.execution.solana import SolanaExecutor
 from src.quotes.types import from_human, to_human
-from src.vnx.deposits import check_usdc_deposit_amount
+from src.vnx.deposits import check_usdc_deposit_amount, validate_eth_usdc_vnx_deposit
+from src.vnx.constants import VNX_ETH_DEPOSIT_ASSET, check_eth_hub_stable_for_vnx
 from src.vnx.usdc_bridge import VnxUsdcBridge
 
 logger = logging.getLogger(__name__)
@@ -15,7 +16,20 @@ logger = logging.getLogger(__name__)
 
 async def eth_usdc_to_vnx(client, amount_usdc: float, bot_cfg: BotConfig | None = None) -> dict:
     """ETH hot wallet USDC → VNX platform deposit."""
-    dep_err = check_usdc_deposit_amount("ETH", amount_usdc)
+    chains = load_chains()
+    eth_chain = chains["ethereum"]
+    hub_err = check_eth_hub_stable_for_vnx(eth_chain.hub_stable, context="eth_usdc_to_vnx")
+    if hub_err:
+        logger.error("Aborting ETH USDC→VNX deposit: %s", hub_err)
+        return {
+            "success": False,
+            "direction": "eth_to_vnx",
+            "amount_usdc": amount_usdc,
+            "deposit_tx": None,
+            "error": hub_err,
+        }
+
+    dep_err = validate_eth_usdc_vnx_deposit(amount_usdc)
     if dep_err:
         logger.error("Aborting ETH USDC→VNX deposit: %s", dep_err)
         return {
@@ -27,12 +41,25 @@ async def eth_usdc_to_vnx(client, amount_usdc: float, bot_cfg: BotConfig | None 
         }
 
     cfg = bot_cfg or load_bot_config()
-    chains = load_chains()
-    eth = EthereumExecutor(chains["ethereum"])
-    amount_raw = from_human(amount_usdc, chains["ethereum"].hub_decimals)
+    eth = EthereumExecutor(eth_chain)
+    amount_raw = from_human(amount_usdc, eth_chain.hub_decimals)
+
+    if eth_chain.hub_stable.upper() != VNX_ETH_DEPOSIT_ASSET:
+        mismatch = (
+            f"ETH hub token is {eth_chain.hub_stable} but VNX requires "
+            f"{VNX_ETH_DEPOSIT_ASSET} — refusing on-chain transfer"
+        )
+        logger.error(mismatch)
+        return {
+            "success": False,
+            "direction": "eth_to_vnx",
+            "amount_usdc": amount_usdc,
+            "deposit_tx": None,
+            "error": mismatch,
+        }
 
     async def builder(addr: str) -> str | None:
-        return eth.transfer_erc20(chains["ethereum"].hub_token, addr, amount_raw)
+        return eth.transfer_erc20(eth_chain.hub_token, addr, amount_raw)
 
     bridge = VnxUsdcBridge(cfg)
     br = await bridge.deposit_usdc(amount_usdc, deposit_tx_builder=builder)
@@ -148,7 +175,7 @@ async def base_usdc_to_vnx_usdc(
         return {"success": False, "stage": "swap", "wormhole": br, "error": swap.get("error")}
 
     usdc_out = swap.get("expected_usdc") or amount_usdt * 0.99
-    dep_err = check_usdc_deposit_amount("ETH", usdc_out)
+    dep_err = validate_eth_usdc_vnx_deposit(usdc_out)
     if dep_err:
         logger.error("Aborting BASE→VNX USDC deposit (post-swap %.2f USDC): %s", usdc_out, dep_err)
         return {

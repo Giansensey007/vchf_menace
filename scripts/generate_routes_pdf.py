@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
-Generate docs/vchf-menace-routes.pdf — full route map for VCHF Menace.
+Generate VCHF Menace route PDFs.
 
 Usage:
-  python scripts/generate_routes_pdf.py           # static route doc
-  python scripts/generate_routes_pdf.py --live    # include live round-trip PnL
+  python scripts/generate_routes_pdf.py              # full route doc (pdflatex)
+  python scripts/generate_routes_pdf.py --live       # include live round-trip PnL
+  python scripts/generate_routes_pdf.py --executive  # one-page executive overview (lualatex)
 """
 from __future__ import annotations
 
