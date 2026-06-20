@@ -162,6 +162,9 @@ def _load_eth_key() -> str:
     pk = os.getenv("BASE_PRIVATE_KEY", "").strip()
     if pk:
         return pk
+    pk = os.getenv("CELO_PRIVATE_KEY", "").strip()
+    if pk:
+        return pk
     raise ValueError("ETH_PRIVATE_KEY or BASE_PRIVATE_KEY not set")
 
 

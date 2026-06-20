@@ -91,7 +91,7 @@ WORMHOLE_COMPLETE_ABI = [
 class BaseExecutor:
     def __init__(self, chain: ChainConfig) -> None:
         self.chain = chain
-        pk = os.getenv("BASE_PRIVATE_KEY", "").strip()
+        pk = (os.getenv("BASE_PRIVATE_KEY") or os.getenv("CELO_PRIVATE_KEY") or "").strip()
         if not pk:
             raise ValueError("BASE_PRIVATE_KEY not set")
         self.account = Account.from_key(pk)

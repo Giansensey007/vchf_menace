@@ -51,7 +51,7 @@ def test_only_base_sol():
         eth_gas_usd_estimate=2.0,
         cctp_fee_usd=1.5,
     )
-    r = choose_execution(_best("base_sol", "base_to_solana", 10), None, cfg)
+    r = choose_execution(None, _best("base_sol", "base_to_solana", 10), None, cfg)
     assert r.opportunity.direction == "base_to_solana"
 
 
@@ -84,7 +84,7 @@ def test_indirect_when_premium_met():
     )
     cs = _best("base_sol", "base_to_solana", 10)
     vs = _best("vnx_sol", "vnx_to_solana", 16)
-    r = choose_execution(cs, vs, cfg)
+    r = choose_execution(None, cs, vs, cfg)
     assert r.opportunity.direction == "vnx_to_solana"
     assert "premium" in r.reason
 
@@ -118,7 +118,7 @@ def test_prefer_base_sol_when_close():
     )
     cs = _best("base_sol", "solana_to_base", 12)
     vs = _best("vnx_sol", "solana_to_vnx", 14)
-    r = choose_execution(cs, vs, cfg)
+    r = choose_execution(None, cs, vs, cfg)
     assert r.opportunity.direction == "solana_to_base"
 
 
@@ -127,6 +127,7 @@ def test_cctp_routes_active_by_default():
 
     cfg = load_bot_config()
     active = set(active_directions(cfg))
+    assert "celo_to_solana" in active
     assert "base_to_solana" in active
     assert "solana_to_vnx" in active
     assert "vnx_to_solana" in active

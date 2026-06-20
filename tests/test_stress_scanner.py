@@ -68,56 +68,56 @@ def _best(group: str, direction: str, net: float, **kw) -> RouteGroupBest:
 class TestChooseExecution:
     def test_neither_profitable(self):
         cfg = _cfg()
-        r = choose_execution(None, None, cfg)
+        r = choose_execution(None, None, None, cfg)
         assert r.opportunity is None
         assert "no profitable" in r.reason
 
     def test_only_vnx_sol(self):
         cfg = _cfg()
         vs = _best("vnx_sol", "vnx_to_solana", 8)
-        r = choose_execution(None, vs, cfg)
+        r = choose_execution(None, None, vs, cfg)
         assert r.opportunity is vs
 
     def test_exact_premium_boundary_prefers_indirect(self):
         cfg = _cfg(indirect_route_premium_usd=5.0)
         cs = _best("base_sol", "base_to_solana", 10)
         vs = _best("vnx_sol", "vnx_to_solana", 15)  # delta == 5
-        r = choose_execution(cs, vs, cfg)
+        r = choose_execution(None, cs, vs, cfg)
         assert r.opportunity is vs
 
     def test_one_below_premium_prefers_celo(self):
         cfg = _cfg(indirect_route_premium_usd=5.0)
         cs = _best("base_sol", "base_to_solana", 10)
         vs = _best("vnx_sol", "vnx_to_solana", 14.99)
-        r = choose_execution(cs, vs, cfg)
+        r = choose_execution(None, cs, vs, cfg)
         assert r.opportunity is cs
 
     def test_negative_delta_still_picks_celo(self):
         cfg = _cfg()
         cs = _best("base_sol", "solana_to_base", 20)
         vs = _best("vnx_sol", "solana_to_vnx", 10)
-        r = choose_execution(cs, vs, cfg)
+        r = choose_execution(None, cs, vs, cfg)
         assert r.opportunity is cs
 
     def test_zero_premium_picks_higher_profit(self):
         cfg = _cfg(indirect_route_premium_usd=0.0)
         cs = _best("base_sol", "base_to_solana", 10)
         vs = _best("vnx_sol", "vnx_to_solana", 10.01)
-        r = choose_execution(cs, vs, cfg)
+        r = choose_execution(None, cs, vs, cfg)
         assert r.opportunity is vs
 
     def test_base_vnx_wins_over_base_sol(self):
         cfg = _cfg()
         cs = _best("base_sol", "base_to_solana", 10)
         cv = _best("base_vnx", "base_to_vnx", 25)
-        r = choose_execution(cs, None, cfg, base_vnx=cv)
+        r = choose_execution(None, cs, None, cfg, base_vnx=cv)
         assert r.opportunity is cv
 
     def test_base_vnx_loses_to_better_base_sol(self):
         cfg = _cfg()
         cs = _best("base_sol", "base_to_solana", 30)
         cv = _best("base_vnx", "vnx_to_base", 12)
-        r = choose_execution(cs, None, cfg, base_vnx=cv)
+        r = choose_execution(None, cs, None, cfg, base_vnx=cv)
         assert r.opportunity is cs
 
 

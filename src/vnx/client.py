@@ -180,6 +180,9 @@ class VnxClient:
         if resp.status_code in (403, 404):
             logger.warning("VNX %s not available (HTTP %s)", endpoint, resp.status_code)
             return None
+        if resp.status_code == 400:
+            logger.warning("VNX %s HTTP 400: %s", endpoint, resp.text[:200])
+            return None
         if resp.status_code >= 400:
             logger.error("VNX %s HTTP %s: %s", endpoint, resp.status_code, resp.text[:200])
             resp.raise_for_status()

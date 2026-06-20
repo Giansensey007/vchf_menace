@@ -57,9 +57,14 @@ async def run_once() -> None:
         opp.route_group,
         is_dry_run(),
     )
-    if opp.base_sol_net is not None or opp.vnx_sol_net is not None:
+    if (
+        opp.celo_sol_net is not None
+        or opp.base_sol_net is not None
+        or opp.vnx_sol_net is not None
+    ):
         logger.info(
-            "Parallel scan: base↔sol=$%s vnx↔sol=$%s | %s",
+            "Parallel scan: celo↔sol=$%s base↔sol=$%s vnx↔sol=$%s | %s",
+            f"{opp.celo_sol_net:.2f}" if opp.celo_sol_net is not None else "n/a",
             f"{opp.base_sol_net:.2f}" if opp.base_sol_net is not None else "n/a",
             f"{opp.vnx_sol_net:.2f}" if opp.vnx_sol_net is not None else "n/a",
             opp.selection_reason,

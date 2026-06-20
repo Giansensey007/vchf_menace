@@ -74,6 +74,8 @@ def sanity_check_config() -> tuple[bool, list[str]]:
     wh = bridge.get("wormhole", {})
     if not wh.get("base_token_bridge") or not wh.get("solana_usdc"):
         issues.append("wormhole bridge config incomplete")
+    if not wh.get("celo_token_bridge") or not wh.get("celo_usdt"):
+        issues.append("wormhole celo bridge config incomplete")
 
     root = ROOT
     gi_path = root / ".gitignore"
