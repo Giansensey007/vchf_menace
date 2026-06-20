@@ -17,7 +17,7 @@
 \begin{document}
 \begin{center}
 {\LARGE\bfseries\color{accent} VCHF Menace --- Route Map}\\[6pt]
-{\color{muted}\small Generated 2026-06-20 09:54 UTC · github.com/Giansensey007/vchf\_menace}\\[12pt]
+{\color{muted}\small Generated 2026-06-20 10:48 UTC · github.com/Giansensey007/vchf\_menace}\\[12pt]
 \end{center}
 \section*{Configuration snapshot}
 \begin{tabular}{@{}ll@{}}
@@ -40,7 +40,7 @@ enable\_vnx\_arb\_routes & true \\
 \item \textbf{Ethereum:} USDC/USDT hub buffers + gas (no VCHF)
 \end{itemize}
 \section*{Arbitrage routes (10 directed pairs)}
-\subsection*{\textcolor{okgreen}{celo\_to\_solana} (ACTIVE)}
+\subsection*{\textcolor{warnred}{celo\_to\_solana} (DISABLED)}
 \begin{tabular}{@{}ll@{}}
 Group & celo\_sol \\
 Buy leg & celo \\
@@ -56,7 +56,7 @@ Closed-loop return & solana\_to\_celo \\
 \item Sell VCHF for Sol USDC (Jupiter)
 \item Wormhole USDT rebalance Celo $\leftrightarrow$ Sol (stable leg)
 \end{enumerate}
-\subsection*{\textcolor{okgreen}{solana\_to\_celo} (ACTIVE)}
+\subsection*{\textcolor{warnred}{solana\_to\_celo} (DISABLED)}
 \begin{tabular}{@{}ll@{}}
 Group & celo\_sol \\
 Buy leg & solana \\
@@ -72,7 +72,7 @@ Closed-loop return & celo\_to\_solana \\
 \item Sell VCHF for Celo USDT (CeloSwap)
 \item Wormhole USDT rebalance
 \end{enumerate}
-\subsection*{\textcolor{okgreen}{celo\_to\_vnx} (ACTIVE)}
+\subsection*{\textcolor{warnred}{celo\_to\_vnx} (DISABLED)}
 \begin{tabular}{@{}ll@{}}
 Group & celo\_vnx \\
 Buy leg & celo \\
@@ -101,7 +101,7 @@ Closed-loop return & celo\_to\_vnx \\
 \item Withdraw VCHF to Celo
 \item Sell VCHF for Celo USDT (CeloSwap)
 \end{enumerate}
-\subsection*{\textcolor{okgreen}{base\_to\_solana} (ACTIVE)}
+\subsection*{\textcolor{warnred}{base\_to\_solana} (DISABLED)}
 \begin{tabular}{@{}ll@{}}
 Group & base\_sol \\
 Buy leg & base \\
@@ -117,7 +117,7 @@ Closed-loop return & solana\_to\_base \\
 \item Sell VCHF for Sol USDC (Jupiter)
 \item Wormhole USDC rebalance Base $\leftrightarrow$ Sol (stable leg)
 \end{enumerate}
-\subsection*{\textcolor{okgreen}{solana\_to\_base} (ACTIVE)}
+\subsection*{\textcolor{warnred}{solana\_to\_base} (DISABLED)}
 \begin{tabular}{@{}ll@{}}
 Group & base\_sol \\
 Buy leg & solana \\
@@ -133,7 +133,7 @@ Closed-loop return & base\_to\_solana \\
 \item Sell VCHF for Base USDC (KyberSwap)
 \item Wormhole USDC rebalance
 \end{enumerate}
-\subsection*{\textcolor{okgreen}{base\_to\_vnx} (ACTIVE)}
+\subsection*{\textcolor{warnred}{base\_to\_vnx} (DISABLED)}
 \begin{tabular}{@{}ll@{}}
 Group & base\_vnx \\
 Buy leg & base \\
@@ -162,7 +162,7 @@ Closed-loop return & base\_to\_vnx \\
 \item Withdraw VCHF to Base
 \item Sell VCHF for Base USDC (KyberSwap)
 \end{enumerate}
-\subsection*{\textcolor{okgreen}{solana\_to\_vnx} (ACTIVE)}
+\subsection*{\textcolor{warnred}{solana\_to\_vnx} (DISABLED)}
 \begin{tabular}{@{}ll@{}}
 Group & vnx\_sol \\
 Buy leg & solana \\

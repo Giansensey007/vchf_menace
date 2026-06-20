@@ -523,6 +523,8 @@ def _build_executive_latex() -> str:
             r"\definecolor{profit}{RGB}{21,122,78}",
             r"\definecolor{profitbg}{RGB}{220,245,230}",
             r"\definecolor{decision}{RGB}{232,240,250}",
+            r"\definecolor{warnbg}{RGB}{254,235,235}",
+            r"\definecolor{warnstroke}{RGB}{197,48,48}",
             r"\newcommand{\statlabel}[1]{{\fontsize{6.5}{8}\selectfont\bfseries\textcolor{ink!55}{\MakeUppercase{#1}}}}",
             r"\newcommand{\badge}[2]{\tikz[baseline=(b.base)]{\node[draw=#2!40,fill=#2,rounded corners=1mm,inner xsep=1.8mm,inner ysep=0.6mm](b){{\fontsize{7}{8.5}\selectfont\bfseries #1}};}}",
             r"\def\FxA{0}\def\FxB{17}\def\FxC{33}\def\FxD{49}\def\FxE{65}\def\FxR{81}",
@@ -594,6 +596,11 @@ def _build_executive_latex() -> str:
             r"CCTP & Sol USDC $\rightarrow$ ETH $\rightarrow$ VNX \\",
             r"\end{tabular}}",
             r"\end{minipage}}\\[2mm]",
+            r"\noindent\fcolorbox{warnstroke}{warnbg}{\begin{minipage}[t][14mm][t]{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}",
+            r"\centering{\fontsize{8}{9.5}\selectfont\bfseries\color{warnstroke} VNX ETH accepts USDC only}\\[2pt]",
+            r"{\fontsize{6}{7.2}\selectfont\raggedright Never deposit USDT on Ethereum to VNX. "
+            r"CCTP and hub paths land USDC on ETH before \texttt{eth\_to\_vnx}.}",
+            r"\end{minipage}}\\[2mm]",
             r"\noindent\fcolorbox{ink!18}{surface}{\begin{minipage}[t][14mm][t]{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}",
             r"{\fontsize{7}{8.5}\selectfont\bfseries Closed-loop return}\\[1pt]",
             r"{\fontsize{6}{7.2}\selectfont After every arb the return leg runs. Platform origin after \texttt{vnx\_to\_solana} uses \texttt{cctp\_sol\_usdc\_to\_vnx} instead of inverse.}",
@@ -643,12 +650,12 @@ def main() -> int:
     DOCS.mkdir(parents=True, exist_ok=True)
 
     if args.executive:
-        tex_path = DOCS / "vchf-menace-executive.tex"
+        tex = _build_executive_latex()
+        tex_path = DOCS / "vchf-menace-routes-executive.tex"
         pdf_path = DOCS / "vchf-menace-routes-executive.pdf"
         engine = "lualatex"
-        if not tex_path.exists():
-            print(f"Missing {tex_path}", file=sys.stderr)
-            return 1
+        tex_path.write_text(tex, encoding="utf-8")
+        print(f"Wrote {tex_path}")
     else:
         live_rows = asyncio.run(_live_scan()) if args.live else None
         tex = _build_latex(live_rows)
