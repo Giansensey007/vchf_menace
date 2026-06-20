@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
-"""Generate docs/vchf-menace-routes-executive.pdf — executive route diagram deck."""
+"""
+Generate docs/gbp-menace-routes-executive.pdf — single-page executive loop deck.
+
+Platform-first, same-asset round-trip model: every route is a loop that starts and
+ends with the VNX token on the platform. Content is generated directly from
+``src/scanner/routes.active_loops()`` so it never drifts from the code.
+
+Usage:
+  python scripts/generate_routes_executive_pdf.py
+"""
 from __future__ import annotations
 
 import subprocess
@@ -11,180 +20,247 @@ ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / "docs"
 sys.path.insert(0, str(ROOT))
 
-from src.scanner.routes import ALL_DIRECTIONS, active_directions
+from src.config_loader import load_tokens
+from src.scanner.routes import (
+    LOOP1_OUTBOUND,
+    LOOP2_INBOUND,
+    LOOP3_CROSS,
+    _bot_token,
+    active_loops,
+)
 
+# ---- per-bot constants -------------------------------------------------------
 PDF_STEM = "vchf-menace-routes-executive"
-GITHUB = r"vchf\_menace"
-BOT = "VCHF Menace"
-TOKEN = "VCHF"
-N_ROUTES = 10
-VNX_MIN = 30.0
+BOT_NAME = "VCHF"
+# ------------------------------------------------------------------------------
 
-ROUTE_FLOWS: dict[str, list[tuple[str, list[tuple[str, str, str, str | None]]]]] = {
-    "celo_to_solana": [("celo→sol (off)", [
-        ("hub_celo", "Celo", "USDT", None), ("act", "off", "no buy", None),
-        ("hub_vnx", "WH", "USDT", "WH"), ("hub_sol", "Sol", "USDC", None),
-    ])],
-    "solana_to_celo": [("sol→celo (off)", [
-        ("hub_sol", "Sol", "USDC", None), ("act", "off", "no buy", None),
-        ("hub_vnx", "WH", "USDT", "WH"), ("hub_celo", "Celo", "USDT", None),
-    ])],
-    "base_to_solana": [("base→sol (off)", [
-        ("hub_base", "Base", "USDC", None), ("act", "off", "no buy", None),
-        ("hub_vnx", "WH", "USDC", "WH"), ("hub_sol", "Sol", "USDC", None),
-    ])],
-    "solana_to_base": [("sol→base (off)", [
-        ("hub_sol", "Sol", "USDC", None), ("act", "off", "no buy", None),
-        ("hub_vnx", "WH", "USDC", "WH"), ("hub_base", "Base", "USDC", None),
-    ])],
-    "celo_to_vnx": [("celo→vnx (off)", [
-        ("hub_celo", "Celo", "USDT", None), ("act", "off", "no buy", None),
-        ("hub_eth", "ETH", "USDC", "WH+swap"), ("hub_vnx", "VNX", "USDC", "VNX"),
-    ])],
-    "vnx_to_celo": [("vnx→celo", [
-        ("hub_vnx", "VNX", "USDC", None), ("act", "Buy", TOKEN, "Platform"),
-        ("hub_vnx", "VNX", "withdraw", "VNX"), ("act", "Sell", TOKEN, "CeloSwap"),
-        ("hub_celo", "Celo", "USDT", None),
-    ])],
-    "base_to_vnx": [("base→vnx (off)", [
-        ("hub_base", "Base", "USDC", None), ("act", "off", "no buy", None),
-        ("hub_eth", "ETH", "USDC", "WH+swap"), ("hub_vnx", "VNX", "USDC", "VNX"),
-    ])],
-    "vnx_to_base": [("vnx→base", [
-        ("hub_vnx", "VNX", "USDC", None), ("act", "Buy", TOKEN, "Platform"),
-        ("hub_vnx", "VNX", "withdraw", "VNX"), ("act", "Sell", TOKEN, "Kyber"),
-        ("hub_base", "Base", "USDC", None),
-    ])],
-    "solana_to_vnx": [("sol→vnx (off)", [
-        ("hub_sol", "Sol", "USDC", None), ("act", "off", "no buy", None),
-        ("hub_eth", "ETH", "USDC", "CCTP"), ("hub_vnx", "VNX", "USDC", "VNX"),
-    ])],
-    "vnx_to_solana": [("vnx→sol", [
-        ("hub_vnx", "VNX", "USDC", None), ("act", "Buy", TOKEN, "Platform"),
-        ("hub_vnx", "VNX", "withdraw", "VNX"), ("act", "Sell", TOKEN, "Jupiter"),
-        ("hub_sol", "Sol", "USDC", None), ("recon", "CCTP", "return", "CCTP"),
-    ])],
+FAMILY_LABEL = {
+    LOOP1_OUTBOUND: "Loop 1 · Outbound",
+    LOOP2_INBOUND: "Loop 2 · Inbound",
+    LOOP3_CROSS: "Loop 3 · Cross",
+}
+CHAIN_DISP = {"celo": "Celo", "base": "Base", "solana": "Solana", "ethereum": "Ethereum"}
+# bridge mechanism -> (label, colour)
+BRIDGE = {
+    "cctp": ("CCTP", "routeb"),
+    "wormhole": ("Wormhole", "primary"),
+    "eth_triangle": ("ETH 2-hop", "warnstroke"),
+    "none": ("direct (ETH)", "profit"),
 }
 
-STYLES = r"""
-\documentclass[9pt,a4paper,landscape]{article}
-\usepackage[a4paper,landscape,margin=7mm]{geometry}
-\usepackage{fontspec}
+
+def _disp(chain: str) -> str:
+    return CHAIN_DISP.get(chain, chain.title())
+
+
+def _mech(loop) -> str:
+    mechs = sorted({s.mechanism for s in loop.bridge_legs if s.mechanism})
+    if not mechs:
+        return "none"
+    return mechs[0] if len(mechs) == 1 else "+".join(mechs)
+
+
+def collect():
+    tok = _bot_token(load_tokens())
+    loops = active_loops(None, tok)
+    rows = []
+    for lp in loops:
+        route = (
+            f"{_disp(lp.chain_a)} $\\rightarrow$ {_disp(lp.chain_b)}"
+            if lp.chain_b
+            else _disp(lp.chain_a)
+        )
+        rows.append((lp.family, FAMILY_LABEL[lp.family], route, _mech(lp), len(lp.steps())))
+    has_eth_trading = any(
+        lp.chain_a == "ethereum" and lp.family in (LOOP1_OUTBOUND, LOOP2_INBOUND)
+        for lp in loops
+    )
+    return tok.symbol, rows, has_eth_trading
+
+
+PREAMBLE = r"""
+% !TeX program = pdflatex
+\documentclass[10pt,a4paper,landscape]{article}
+\usepackage[a4paper,landscape,margin=9mm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{tgheros}
+\renewcommand*\familydefault{\sfdefault}
 \usepackage{microtype}
-\defaultfontfeatures{Ligatures=TeX}
-\IfFontExistsTF{Inter}{\usepackage[sfdefault,tabular]{inter}}{
-  \IfFontExistsTF{Helvetica Neue}{\setmainfont{Helvetica Neue}}{\setmainfont{TeX Gyre Heros}}}
 \usepackage{xcolor}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{adjustbox}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta}
 \pagestyle{empty}
 \setlength{\parindent}{0pt}
 \definecolor{ink}{RGB}{25,35,55}
+\definecolor{surface}{RGB}{245,248,252}
 \definecolor{primary}{RGB}{0,82,155}
-\definecolor{celofill}{RGB}{253,236,200}\definecolor{celostroke}{RGB}{166,124,0}
-\definecolor{basefill}{RGB}{232,245,233}\definecolor{basestroke}{RGB}{46,125,50}
-\definecolor{solfill}{RGB}{234,218,255}\definecolor{solstroke}{RGB}{122,43,210}
-\definecolor{ethfill}{RGB}{221,228,250}\definecolor{ethstroke}{RGB}{67,85,187}
-\definecolor{vnxfill}{RGB}{224,242,240}\definecolor{vnxstroke}{RGB}{0,107,98}
-\definecolor{callout}{RGB}{255,243,224}\definecolor{calloutstroke}{RGB}{230,126,34}
-\tikzset{
-  hub_celo/.style={draw=celostroke,thick,fill=celofill,rounded corners=2pt,minimum height=6.5mm,minimum width=12mm,align=center,font=\fontsize{6}{7.5}\selectfont\bfseries,inner sep=0.5pt},
-  hub_base/.style={draw=basestroke,thick,fill=basefill,rounded corners=2pt,minimum height=6.5mm,minimum width=12mm,align=center,font=\fontsize{6}{7.5}\selectfont\bfseries,inner sep=0.5pt},
-  hub_sol/.style={draw=solstroke,thick,fill=solfill,rounded corners=2pt,minimum height=6.5mm,minimum width=12mm,align=center,font=\fontsize{6}{7.5}\selectfont\bfseries,inner sep=0.5pt},
-  hub_eth/.style={draw=ethstroke,thick,fill=ethfill,rounded corners=2pt,minimum height=6.5mm,minimum width=12mm,align=center,font=\fontsize{6}{7.5}\selectfont\bfseries,inner sep=0.5pt},
-  hub_vnx/.style={draw=vnxstroke,thick,fill=vnxfill,rounded corners=2pt,minimum height=6.5mm,minimum width=12mm,align=center,font=\fontsize{6}{7.5}\selectfont\bfseries,inner sep=0.5pt},
-  act/.style={draw=ink!40,fill=white,rounded corners=2pt,minimum height=6.5mm,minimum width=10mm,align=center,font=\fontsize{5.8}{7}\selectfont,inner sep=0.5pt},
-  recon/.style={draw=primary!55,fill=primary!8,dashed,thick,rounded corners=2pt,minimum height=6.5mm,minimum width=11mm,align=center,font=\fontsize{5.5}{7}\selectfont\bfseries,text=primary,inner sep=0.5pt},
-  arr/.style={-{Stealth[length=1.4mm]},thick,draw=ink!45},
-  rowlbl/.style={anchor=east,font=\fontsize{6}{7.5}\selectfont\bfseries,text=ink!70,minimum width=14mm,align=right},
-}
-\def\FxA{0}\def\FxB{15}\def\FxC{29}\def\FxD{43}\def\FxE{57}\def\FxF{71}\def\FxG{85}
+\definecolor{profit}{RGB}{21,122,78}
+\definecolor{profitbg}{RGB}{220,245,230}
+\definecolor{warnstroke}{RGB}{197,48,48}
+\definecolor{routeb}{RGB}{88,55,160}
+\newcommand{\statlabel}[1]{{\fontsize{6.5}{8}\selectfont\bfseries\textls[120]{\textcolor{ink!55}{\MakeUppercase{#1}}}}}
+\newcommand{\bridgebadge}[2]{\tikz[baseline=(b.base)]{\node[draw=#2,fill=#2!10,rounded corners=1mm,inner xsep=1.6mm,inner ysep=0.5mm](b){{\fontsize{6.6}{8}\selectfont\bfseries\textcolor{#2}{#1}}};}}
+\newcommand{\stepnum}[1]{\tikz[baseline=(s.base)]{\node[circle,fill=primary,inner sep=0.5mm,minimum size=3.3mm](s){{\fontsize{5.8}{6.2}\selectfont\bfseries\color{white}#1}};}}
 """
 
 
-def _flow_row(y: float, label: str, nodes: list[tuple], active: bool) -> list[str]:
-    cols = ["A", "B", "C", "D", "E", "F", "G"]
-    lines: list[str] = []
-    color = "primary" if active else "ink!40"
-    lines.append(rf"\node[rowlbl,text={color}] at (-2,{y}) {{{label}}};")
-    prev = None
-    for i, (kind, l1, l2, tag) in enumerate(nodes):
-        if i >= len(cols):
-            break
-        nid = f"n{int(y)}_{i}"
-        tag_tex = rf"\\{{\fontsize{{4.8}}{{6}}\selectfont\textcolor{{ink!45}}{{{tag}}}}}" if tag else ""
-        lines.append(rf"\node[{kind},anchor=west] ({nid}) at (\Fx{cols[i]},{y}) {{{l1}\\{l2}{tag_tex}}};")
-        if prev:
-            lines.append(rf"\draw[arr] ({prev})--({nid});")
-        prev = nid
-    return lines
-
-
-def build_latex() -> str:
-    active = set(active_directions())
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    lines = [STYLES, r"\begin{document}", r"\color{ink}",
-        rf"{{\fontsize{{15}}{{17}}\selectfont\bfseries\color{{primary}} {BOT}}}\\[1pt]",
-        rf"{{\fontsize{{8.5}}{{10.5}}\selectfont {len(active)}/{N_ROUTES} active · platform withdraw$\rightarrow$chain sell · dual hub}}\\[1pt]",
-        rf"{{\fontsize{{6.5}}{{8}}\selectfont\textcolor{{ink!55}}{{{now} · github.com/Giansensey007/{GITHUB}}}}}",
-        r"\vspace{1.5mm}\noindent\rule{\linewidth}{0.3pt}\vspace{1.5mm}",
-        r"\noindent\begin{tikzpicture}[x=1mm,y=-1mm]",
-        r"\node[anchor=west,font=\fontsize{7}{8.5}\selectfont\bfseries\color{celostroke}] at (0,0) {Celo hub (USDT)};",
-        r"\node[hub_celo] (hc) at (22,5) {Celo\\USDT};",
-        r"\node[hub_sol] (hs) at (55,5) {Sol\\USDC};",
-        r"\node[anchor=west,font=\fontsize{7}{8.5}\selectfont\bfseries\color{basestroke}] at (75,0) {Base hub (USDC)};",
-        r"\node[hub_base] (hb) at (97,5) {Base\\USDC};",
-        r"\node[hub_eth] (he) at (130,5) {ETH\\USDC};",
-        r"\node[hub_vnx] (hv) at (155,5) {VNX\\USDC};",
-        r"\draw[arr] (hc)--node[above,font=\fontsize{4.5}{5.5}\selectfont]{VNX VCHF} (hs);",
-        r"\draw[arr] (hb)--node[above,font=\fontsize{4.5}{5.5}\selectfont]{VNX VCHF} (hs);",
-        r"\draw[arr,dashed] (hc)--node[below,font=\fontsize{4.5}{5.5}\selectfont]{Wormhole} (he);",
-        r"\draw[arr,dashed] (hb)--node[below,font=\fontsize{4.5}{5.5}\selectfont]{Wormhole} (he);",
-        r"\draw[arr,dashed] (hs)--node[below,font=\fontsize{4.5}{5.5}\selectfont]{CCTP} (he);",
-        r"\draw[arr] (he)--node[above,font=\fontsize{4.5}{5.5}\selectfont]{VNX USDC} (hv);",
-        r"\draw[arr] (hc)--node[below,font=\fontsize{4.5}{5.5}\selectfont]{VNX} (hv);",
-        r"\draw[arr] (hb)--node[below,font=\fontsize{4.5}{5.5}\selectfont]{VNX} (hv);",
-        r"\end{tikzpicture}\vspace{2mm}",
-        r"\noindent\begin{tikzpicture}[x=1mm,y=-1mm]",
+def _family_card(title: str, color: str, steps: list[str]) -> list[str]:
+    out = [
+        rf"\noindent\fcolorbox{{{color}!35}}{{{color}!6}}{{\begin{{minipage}}{{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}}",
+        rf"{{\fontsize{{8.5}}{{10}}\selectfont\bfseries\color{{{color}}} {title}}}\\[1.2mm]",
+        r"{\fontsize{7}{9}\selectfont",
     ]
+    for i, st in enumerate(steps, 1):
+        out.append(rf"\stepnum{{{i}}}~{st}\\[0.5mm]")
+    out.append(r"}\end{minipage}}")
+    return out
+
+
+def build_latex(token: str, rows, has_eth: bool) -> str:
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    n1 = sum(1 for r in rows if r[0] == LOOP1_OUTBOUND)
+    n2 = sum(1 for r in rows if r[0] == LOOP2_INBOUND)
+    n3 = sum(1 for r in rows if r[0] == LOOP3_CROSS)
+    total = len(rows)
+    tally: dict[str, int] = {}
+    for _f, _l, _r, mech, _s in rows:
+        tally[mech] = tally.get(mech, 0) + 1
+    used = [m for m in ("cctp", "wormhole", "eth_triangle", "none") if m in tally]
+    bridges_short = " · ".join(BRIDGE[m][0] for m in used)
+
+    eth_note = r" \textit{(skipped if X = ETH)}" if has_eth else ""
+
+    lines = [
+        PREAMBLE.strip(),
+        r"\begin{document}",
+        r"\color{ink}",
+        rf"{{\fontsize{{16}}{{18}}\selectfont\bfseries\color{{primary}} {BOT_NAME} Menace --- Loop Routes}}"
+        rf"~{{\fontsize{{10}}{{12}}\selectfont\textcolor{{ink!55}}{{({token})}}}}\\[1pt]",
+        r"{\fontsize{8.5}{10.5}\selectfont Platform-first treasury · same-asset round trips · "
+        rf"{token} held on VNX · chains hold hub stables only}}\\[1pt]",
+        rf"{{\fontsize{{6.8}}{{8.2}}\selectfont\textcolor{{ink!55}}{{{now} · docs/{PDF_STEM}.pdf · generated from src/scanner/routes.active\_loops()}}}}",
+        r"\vspace{1.5mm}\noindent\rule{\linewidth}{0.3pt}\vspace{1.5mm}",
+        # stat strip
+        r"\noindent\begin{tabular}{@{}>{\centering\arraybackslash}p{0.185\linewidth}"
+        r">{\centering\arraybackslash}p{0.185\linewidth}"
+        r">{\centering\arraybackslash}p{0.185\linewidth}"
+        r">{\centering\arraybackslash}p{0.185\linewidth}"
+        r">{\centering\arraybackslash}p{0.185\linewidth}@{}}",
+        rf"\fcolorbox{{profit!35}}{{profitbg}}{{\begin{{minipage}}[c][11mm][c]{{0.9\linewidth}}\statlabel{{Loops}}{{\fontsize{{11}}{{13}}\selectfont\bfseries\textcolor{{profit}}{{{total}}}}}\end{{minipage}}}} &",
+        rf"\fcolorbox{{primary!25}}{{surface}}{{\begin{{minipage}}[c][11mm][c]{{0.9\linewidth}}\statlabel{{Loop 1}}{{\fontsize{{10}}{{12}}\selectfont\bfseries {n1}}}\end{{minipage}}}} &",
+        rf"\fcolorbox{{primary!25}}{{surface}}{{\begin{{minipage}}[c][11mm][c]{{0.9\linewidth}}\statlabel{{Loop 2}}{{\fontsize{{10}}{{12}}\selectfont\bfseries {n2}}}\end{{minipage}}}} &",
+        rf"\fcolorbox{{primary!25}}{{surface}}{{\begin{{minipage}}[c][11mm][c]{{0.9\linewidth}}\statlabel{{Loop 3}}{{\fontsize{{10}}{{12}}\selectfont\bfseries {n3}}}\end{{minipage}}}} &",
+        rf"\fcolorbox{{primary!25}}{{surface}}{{\begin{{minipage}}[c][11mm][c]{{0.9\linewidth}}\statlabel{{Bridges}}{{\fontsize{{7}}{{8.5}}\selectfont\bfseries {bridges_short}}}\end{{minipage}}}} \\",
+        r"\end{tabular}",
+        r"\vspace{1.6mm}\noindent\rule{\linewidth}{0.3pt}\vspace{1.5mm}",
+        # two columns
+        r"\noindent\begin{minipage}[t]{0.46\linewidth}",
+        r"{\fontsize{9}{11}\selectfont\bfseries\color{primary} Loop families}\\[1.5mm]",
+    ]
+    lines += _family_card(
+        "Loop 1 · Outbound", "primary",
+        [
+            r"Withdraw token: \textbf{platform $\rightarrow$ chain X}",
+            r"Sell token for stable on chain X",
+            rf"Bridge stable \textbf{{X $\rightarrow$ ETH hub}}{eth_note}",
+            r"Deposit USDC \textbf{ETH $\rightarrow$ VNX}",
+            r"\textbf{Platform buy-back} $\Rightarrow$ same token on platform",
+        ],
+    )
+    lines.append(r"\\[1.4mm]")
+    lines += _family_card(
+        "Loop 2 · Inbound", "profit",
+        [
+            r"Platform sell token for USDC",
+            r"Withdraw USDC \textbf{platform $\rightarrow$ ETH}",
+            rf"Bridge stable \textbf{{ETH $\rightarrow$ chain X}}{eth_note}",
+            r"\textbf{On-chain buy-back} token on chain X",
+            r"Deposit token \textbf{X $\rightarrow$ VNX}",
+        ],
+    )
+    lines.append(r"\\[1.4mm]")
+    lines += _family_card(
+        "Loop 3 · Cross", "routeb",
+        [
+            r"Withdraw token: \textbf{platform $\rightarrow$ chain A}",
+            r"Sell token for stable on chain A",
+            r"\textbf{Direct bridge} stable \textbf{A $\rightarrow$ B} (CCTP preferred)",
+            r"\textbf{On-chain buy-back} token on chain B",
+            r"Deposit token \textbf{B $\rightarrow$ VNX}",
+        ],
+    )
+    lines += [
+        r"\end{minipage}\hfill\begin{minipage}[t]{0.50\linewidth}",
+        r"{\fontsize{9}{11}\selectfont\bfseries\color{primary} Loops}\\[1.5mm]",
+        r"{\fontsize{7.4}{9.4}\selectfont\renewcommand{\arraystretch}{1.25}",
+        r"\adjustbox{max width=\linewidth}{",
+        r"\begin{tabular}{@{}clll@{}}\toprule",
+        r"\textbf{\#} & \textbf{Family} & \textbf{Route} & \textbf{Bridge} \\\midrule",
+    ]
+    for i, (_fam, fam_label, route, mech, _steps) in enumerate(rows, 1):
+        label, color = BRIDGE[mech]
+        lines.append(rf"{i} & {fam_label} & {route} & \bridgebadge{{{label}}}{{{color}}} \\")
+    lines += [
+        r"\bottomrule\end{tabular}}}",
+        r"\\[3mm]",
+        r"{\fontsize{8.5}{10.5}\selectfont\bfseries\color{primary} Bridge legend}\\[1.5mm]",
+        r"\begin{tikzpicture}[x=1mm,y=1mm,baseline=(a.base)]",
+    ]
+    legend_text = {
+        "cctp": r"Circle USDC $\leftrightarrow$ USDC direct (preferred)",
+        "wormhole": r"Any Celo USDT stable leg",
+        "eth_triangle": r"Celo $\leftrightarrow$ Base cross-stable via ETH hub",
+        "none": r"No bridge --- USDC already on ETH",
+    }
     y = 0.0
-    for direction in ALL_DIRECTIONS:
-        for label, nodes in ROUTE_FLOWS.get(direction, []):
-            y += 7.5
-            lines += _flow_row(y, label, nodes, direction in active)
+    first = True
+    for m in used:
+        label, color = BRIDGE[m]
+        anchor = "(a)" if first else ""
+        node_id = "(a)" if first else ""
+        lines.append(
+            rf"\node[anchor=west]{node_id} at(0,{y}){{\bridgebadge{{{label}}}{{{color}}}}};"
+            rf"\node[anchor=west,font=\fontsize{{6.6}}{{8}}\selectfont]at(19,{y}){{{legend_text[m]}}};"
+        )
+        first = False
+        y -= 5.0
     lines += [
         r"\end{tikzpicture}",
-        r"\vspace{1.5mm}\noindent\rule{\linewidth}{0.3pt}\vspace{1mm}",
-        r"\noindent\begin{minipage}[t]{0.48\linewidth}{\fontsize{6.5}{8}\selectfont\bfseries Legend}\\[0.5pt]",
-        r"{\fontsize{6}{7.5}\selectfont \textbf{VNX} VCHF bridge + platform · \textbf{Wormhole} stable rebalance · \textbf{CCTP} Sol$\leftrightarrow$ETH}",
-        r"\end{minipage}\hfill\begin{minipage}[t]{0.48\linewidth}\raggedleft",
-        rf"{{\fontsize{{6.5}}{{8}}\selectfont\bfseries Minimum sizes}}\\[0.5pt]",
-        rf"{{\fontsize{{6}}{{7.5}}\selectfont Deposit 5 {TOKEN} · Platform {VNX_MIN:.0f} {TOKEN} · ETH USDC 20 · Deploy 200 {TOKEN}}}",
         r"\end{minipage}",
-        r"\vspace{1.5mm}",
-        r"\noindent\fcolorbox{calloutstroke}{callout}{\begin{minipage}{0.98\linewidth}",
-        r"{\fontsize{6.5}{8}\selectfont\bfseries VNX Ethereum accepts USDC only} --- dual-hub Celo USDT and Base USDC settle via Wormhole to ETH before VNX credit.",
-        r"\end{minipage}}",
+        r"\vfill",
+        r"{\fontsize{6.4}{7.8}\selectfont\textcolor{ink!55}{Same asset in / same asset out · bot never opens inventory · buy-backs only close loops · "
+        r"live execution gated by \texttt{ENABLE\_LOOP\_PIPELINE} + \texttt{ENABLE\_LOOP\_EXECUTOR}.}}",
         r"\end{document}",
     ]
     return "\n".join(lines)
 
 
 def main() -> int:
-    DOCS.mkdir(parents=True, exist_ok=True)
+    token, rows, has_eth = collect()
     tex_path = DOCS / f"{PDF_STEM}.tex"
     pdf_path = DOCS / f"{PDF_STEM}.pdf"
-    tex_path.write_text(build_latex(), encoding="utf-8")
-    print(f"Wrote {tex_path}")
+    tex_path.write_text(build_latex(token, rows, has_eth), encoding="utf-8")
+    print(f"Wrote {tex_path} ({len(rows)} loops)")
+
+    pdf_path.unlink(missing_ok=True)
+    proc = None
     for _ in range(2):
         proc = subprocess.run(
-            ["lualatex", "-interaction=nonstopmode", "-output-directory", str(DOCS), tex_path.name],
-            cwd=DOCS, capture_output=True, text=True,
+            ["pdflatex", "-interaction=nonstopmode", "-output-directory", str(DOCS), tex_path.name],
+            cwd=DOCS,
+            capture_output=True,
+            text=True,
+            errors="replace",
         )
     if not pdf_path.exists():
-        print((proc.stdout or "")[-3000:])
+        print((proc.stdout if proc else "")[-3000:])
+        print("pdflatex failed", file=sys.stderr)
         return 1
-    print(f"Wrote {pdf_path}")
+    print(f"Wrote {pdf_path} ({pdf_path.stat().st_size:,} bytes)")
     return 0
 
 
