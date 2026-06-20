@@ -245,6 +245,11 @@ class WormholeClaimQueue:
             if item.source_chain == "ethereum":
                 eth = EthereumExecutor(chains["ethereum"])
                 return WormholePortalBridge._initiate_receipt_ok(eth.w3, tx)
+            if item.source_chain == "celo":
+                from src.execution.celo import CeloExecutor
+
+                celo = CeloExecutor(chains["celo"])
+                return WormholePortalBridge._initiate_receipt_ok(celo.w3, tx)
         except Exception:
             pass
         return False
@@ -264,6 +269,11 @@ class WormholeClaimQueue:
             elif item.source_chain == "ethereum":
                 eth = EthereumExecutor(chains["ethereum"])
                 rcpt = eth.w3.eth.get_transaction_receipt(tx)
+            elif item.source_chain == "celo":
+                from src.execution.celo import CeloExecutor
+
+                celo = CeloExecutor(chains["celo"])
+                rcpt = celo.w3.eth.get_transaction_receipt(tx)
             else:
                 return None
             logs = []
@@ -302,4 +312,6 @@ class WormholeClaimQueue:
             return token_bridge_emitter(wh["base_token_bridge"])
         if chain == "ethereum":
             return token_bridge_emitter(wh["ethereum_token_bridge"])
+        if chain == "celo":
+            return token_bridge_emitter(wh["celo_token_bridge"])
         raise ValueError(f"no wormhole emitter for {chain}")
