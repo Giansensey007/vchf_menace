@@ -24,7 +24,7 @@ def _best(group: str, direction: str, net: float) -> RouteGroupBest:
     return RouteGroupBest(group, direction, 500, net, _sim(direction, net))
 
 
-def test_only_base_sol():
+def test_only_celo_sol():
     cfg = BotConfig(
         poll_interval_sec=60,
         min_profit_usd=5,
@@ -39,7 +39,6 @@ def test_only_base_sol():
         peg_max=1.02,
         vnx_bridge_poll_sec=30,
         vnx_bridge_timeout_sec=3600,
-        celo_gas_usd_estimate=0.25,
         base_gas_usd_estimate=0.25,
         solana_fee_usd_estimate=0.05,
         vnx_bridge_fee_usd=1.0,
@@ -51,8 +50,8 @@ def test_only_base_sol():
         eth_gas_usd_estimate=2.0,
         cctp_fee_usd=1.5,
     )
-    r = choose_execution(None, _best("base_sol", "base_to_solana", 10), None, cfg)
-    assert r.opportunity.direction == "base_to_solana"
+    r = choose_execution(_best("celo_sol", "celo_to_solana", 10), None, cfg)
+    assert r.opportunity.direction == "celo_to_solana"
 
 
 def test_indirect_when_premium_met():
@@ -70,7 +69,6 @@ def test_indirect_when_premium_met():
         peg_max=1.02,
         vnx_bridge_poll_sec=30,
         vnx_bridge_timeout_sec=3600,
-        celo_gas_usd_estimate=0.25,
         base_gas_usd_estimate=0.25,
         solana_fee_usd_estimate=0.05,
         vnx_bridge_fee_usd=1.0,
@@ -82,14 +80,14 @@ def test_indirect_when_premium_met():
         eth_gas_usd_estimate=2.0,
         cctp_fee_usd=1.5,
     )
-    cs = _best("base_sol", "base_to_solana", 10)
+    cs = _best("celo_sol", "celo_to_solana", 10)
     vs = _best("vnx_sol", "vnx_to_solana", 16)
-    r = choose_execution(None, cs, vs, cfg)
+    r = choose_execution(cs, vs, cfg)
     assert r.opportunity.direction == "vnx_to_solana"
     assert "premium" in r.reason
 
 
-def test_prefer_base_sol_when_close():
+def test_prefer_celo_sol_when_close():
     cfg = BotConfig(
         poll_interval_sec=60,
         min_profit_usd=5,
@@ -104,7 +102,6 @@ def test_prefer_base_sol_when_close():
         peg_max=1.02,
         vnx_bridge_poll_sec=30,
         vnx_bridge_timeout_sec=3600,
-        celo_gas_usd_estimate=0.25,
         base_gas_usd_estimate=0.25,
         solana_fee_usd_estimate=0.05,
         vnx_bridge_fee_usd=1.0,
@@ -116,10 +113,10 @@ def test_prefer_base_sol_when_close():
         eth_gas_usd_estimate=2.0,
         cctp_fee_usd=1.5,
     )
-    cs = _best("base_sol", "solana_to_base", 12)
+    cs = _best("celo_sol", "solana_to_celo", 12)
     vs = _best("vnx_sol", "solana_to_vnx", 14)
-    r = choose_execution(None, cs, vs, cfg)
-    assert r.opportunity.direction == "solana_to_base"
+    r = choose_execution(cs, vs, cfg)
+    assert r.opportunity.direction == "solana_to_celo"
 
 
 def test_cctp_routes_active_by_default():
@@ -128,8 +125,7 @@ def test_cctp_routes_active_by_default():
     cfg = load_bot_config()
     active = set(active_directions(cfg))
     assert "celo_to_solana" in active
-    assert "base_to_solana" in active
     assert "solana_to_vnx" in active
     assert "vnx_to_solana" in active
-    assert "base_to_vnx" in active
-    assert "vnx_to_base" in active
+    assert "celo_to_vnx" in active
+    assert "vnx_to_celo" in active

@@ -12,7 +12,7 @@ _DEFAULT_MS: dict[str, float] = {
     "jupiter": 1200.0,
     "vnx": 1200.0,
     "cctp": 1000.0,
-    "base_rpc": 400.0,
+    "celo_rpc": 400.0,
     "solana_rpc": 800.0,
     "eth_rpc": 250.0,
     "blockscout": 1000.0,

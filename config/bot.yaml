@@ -13,18 +13,17 @@ bot:
   peg_max: 1.02
   vnx_bridge_poll_sec: 30
   vnx_bridge_timeout_sec: 3600
-  celo_gas_usd_estimate: 0.25
   base_gas_usd_estimate: 0.25
   solana_fee_usd_estimate: 0.05
   vnx_bridge_fee_usd: 1.0
   vnx_platform_fee_usd: 0.5
-  # Wormhole Portal USDT between Base ↔ Solana (stable rebalance; accounting hub)
+  # Wormhole Portal USDT between Celo ↔ Solana (stable rebalance; accounting hub)
   wormhole_bridge_fee_usd: 0.5
-  # Direct Base ↔ VNX VCHF bridge (base_to_vnx / vnx_to_base)
+  # Direct Celo ↔ VNX VCHF bridge (celo_to_vnx / vnx_to_celo)
   enable_vnx_arb_routes: true
   # SOL ↔ VNX via CCTP (Sol USDC → ETH USDC → platform)
   enable_vnx_cctp_routes: true
-  # Prefer direct base↔sol unless indirect SOL↔platform is ≥ this much better ($)
+  # Prefer direct celo↔sol unless indirect SOL↔platform is ≥ this much better ($)
   indirect_route_premium_usd: 5.0
   # API pacing — see src/quotes/api_gate.py and .env.example API_SYNC_* vars
   quote_concurrency: 1

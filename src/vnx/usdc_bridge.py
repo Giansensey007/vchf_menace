@@ -10,12 +10,7 @@ import httpx
 
 from src.config_loader import BotConfig, is_dry_run
 from src.vnx.client import VnxClient
-from src.vnx.collision import (
-    collision_backoff_sec,
-    collision_retry_max,
-    is_vnx_collision_error,
-    vnx_error_message,
-)
+from src.vnx.collision import collision_backoff_sec, collision_retry_max, is_vnx_collision_error, vnx_error_message
 from src.vnx.deposits import check_usdc_deposit_amount
 
 logger = logging.getLogger(__name__)
@@ -50,7 +45,7 @@ class VnxUsdcBridge:
         self.eth_blockchain = os.getenv("VNX_ETH_BLOCKCHAIN", "ETH").strip().upper()
         eth_label = os.getenv("VNX_ETH_WITHDRAW_LABEL", "arb_explorer_mainnet_USDC").strip()
         self.withdraw_label = eth_label
-        if eth_label == os.getenv("VNX_BASE_WITHDRAW_LABEL", "").strip():
+        if eth_label == os.getenv("VNX_CELO_WITHDRAW_LABEL", "").strip():
             logger.warning(
                 "VNX_ETH_WITHDRAW_LABEL matches BASE label — USDC withdraw requires ETH whitelist label "
                 "(e.g. arb_explorer_mainnet_USDC)"
@@ -95,13 +90,7 @@ class VnxUsdcBridge:
                 self.eth_blockchain,
             )
 
-            bal0 = await vnx.account_balance_resilient()
-            err0 = vnx_error_message(bal0)
-            if err0:
-                return UsdcBridgeResult(
-                    direction, quantity, "", "", None, None, False, False, f"VNX balance unavailable: {err0}"
-                )
-            balance_before = vnx.usdc_balance(bal0)
+            balance_before = vnx.usdc_balance(await vnx.account_balance_resilient())
             deposit_tx = await deposit_tx_builder(deposit_address)
             if not deposit_tx:
                 return UsdcBridgeResult(
@@ -115,22 +104,13 @@ class VnxUsdcBridge:
                 await asyncio.sleep(self.cfg.vnx_bridge_poll_sec)
                 try:
                     bal_resp = await vnx.account_balance()
+                    poll_errors = 0
                 except Exception as exc:
                     poll_errors += 1
                     logger.warning("VNX USDC poll failed (%s): %s", poll_errors, exc)
                     if poll_errors >= 3:
                         await asyncio.sleep(min(30, self.cfg.vnx_bridge_poll_sec))
                     continue
-                err_msg = vnx_error_message(bal_resp)
-                if err_msg:
-                    poll_errors += 1
-                    if is_vnx_collision_error(err_msg):
-                        logger.warning("VNX USDC poll contention (%s): %s", poll_errors, err_msg)
-                        await asyncio.sleep(collision_backoff_sec(min(poll_errors - 1, 2)))
-                    else:
-                        logger.warning("VNX USDC poll error: %s", err_msg)
-                    continue
-                poll_errors = 0
                 credited = vnx.usdc_balance(bal_resp)
                 if credited >= balance_before + quantity * 0.99:
                     logger.info("USDC credited on platform: %.2f (was %.2f)", credited, balance_before)
@@ -164,13 +144,7 @@ class VnxUsdcBridge:
             return UsdcBridgeResult(direction, quantity, "", label, None, None, is_dry_run(), False, "zero quantity")
 
         async with VnxClient() as vnx:
-            bal = await vnx.account_balance_resilient()
-            err = vnx_error_message(bal)
-            if err:
-                return UsdcBridgeResult(
-                    direction, quantity, "", label, None, None, False, False, f"VNX balance unavailable: {err}"
-                )
-            balance = vnx.usdc_balance(bal)
+            balance = vnx.usdc_balance(await vnx.account_balance_resilient())
             withdraw_qty = _round_usdc(min(quantity, balance))
             if withdraw_qty < quantity * 0.95:
                 return UsdcBridgeResult(

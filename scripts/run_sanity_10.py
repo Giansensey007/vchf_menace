@@ -4,13 +4,13 @@
 
 SA-00  config/env sanity
 SA-01  live Jupiter (Solana VCHF sell)
-SA-02  live Base onchain (VCHF buy)
+SA-02  live Celo onchain (VCHF buy)
 SA-03  live VNX platform quotes
-SA-04  VNX VCHF deposit addresses (BASE + SOL)
+SA-04  VNX VCHF deposit addresses (CELO + SOL)
 SA-05  Wormhole USDT bridge quote
 SA-06  VNX VCHF bridge dry-run orchestrator
-SA-07  live simulate base_to_solana
-SA-08  live simulate solana_to_base
+SA-07  live simulate celo_to_solana
+SA-08  live simulate solana_to_celo
 SA-09  pytest suite (unit + integration mocks)
 """
 from __future__ import annotations
@@ -98,12 +98,12 @@ async def agent_sa02() -> AgentResult:
 
     chains = load_chains()
     token = load_tokens()["VCHF"]
-    celo = chains["base"]
+    celo = chains["celo"]
     usdt = 70.0
-    dec = token_decimals(token, "base")
+    dec = token_decimals(token, "celo")
 
     async with build_client() as client:
-        q = await buy_token_with_stable(client, celo, token, "base", from_human(usdt, celo.hub_decimals))
+        q = await buy_token_with_stable(client, celo, token, "celo", from_human(usdt, celo.hub_decimals))
     if not q:
         return AgentResult("SA-02", "live-celo-onchain-buy", False, "no quote")
     vchf = float(to_human(q.amount_out, dec))
@@ -182,7 +182,7 @@ async def agent_sa04() -> AgentResult:
     ok = True
     parts: list[str] = []
     async with VnxClient() as vnx:
-        for env_key, default in (("VNX_BASE_BLOCKCHAIN", "BASE"), ("VNX_SOL_BLOCKCHAIN", "SOL")):
+        for env_key, default in (("VNX_CELO_BLOCKCHAIN", "CELO"), ("VNX_SOL_BLOCKCHAIN", "SOL")):
             bc = os.getenv(env_key, default)
             try:
                 dep = await vnx.deposit_address("VCHF", bc)
@@ -204,14 +204,14 @@ async def agent_sa05() -> AgentResult:
     from src.config_loader import load_bridge_config, load_chains
 
     wh_cfg = load_bridge_config()["wormhole"]
-    celo = load_chains()["base"]
+    celo = load_chains()["celo"]
     wh = WormholePortalBridge(celo)
-    q = wh.quote_usdt("base", "solana", 100.0)
+    q = wh.quote_usdt("celo", "solana", 100.0)
     ok = q.ok and q.amount_out_usdt > 0
     parts = [
         f"100 USDT -> {q.amount_out_usdt:.2f} USDT",
         f"fee ${q.fee_usd:.2f}",
-        f"bridge {wh_cfg['base_token_bridge'][:10]}…",
+        f"bridge {wh_cfg['celo_token_bridge'][:10]}…",
     ]
     return AgentResult("SA-05", "wormhole-usdt-quote", ok, " | ".join(parts))
 
@@ -229,9 +229,9 @@ async def agent_sa06() -> AgentResult:
         return "dry-run-deposit"
 
     result = await bridge.bridge_vchf(
-        direction="base_to_solana",
+        direction="celo_to_solana",
         quantity=50.0,
-        source_blockchain=os.getenv("VNX_BASE_BLOCKCHAIN", "BASE"),
+        source_blockchain=os.getenv("VNX_CELO_BLOCKCHAIN", "CELO"),
         dest_blockchain=os.getenv("VNX_SOL_BLOCKCHAIN", "SOL"),
         dest_label=os.getenv("VNX_SOL_WITHDRAW_LABEL", "sol-hot"),
         deposit_tx_builder=fake_deposit,
@@ -273,17 +273,17 @@ async def _simulate(direction: str, size: float) -> AgentResult:
     if not sane and sim.error is None:
         parts.append(f"sanity_issues={issues}")
 
-    agent_id = "SA-07" if direction == "base_to_solana" else "SA-08"
+    agent_id = "SA-07" if direction == "celo_to_solana" else "SA-08"
     name = f"live-sim-{direction.replace('_', '-')}"
     return AgentResult(agent_id, name, ok, " | ".join(parts))
 
 
 async def agent_sa07() -> AgentResult:
-    return await _simulate("base_to_solana", 50.0)
+    return await _simulate("celo_to_solana", 50.0)
 
 
 async def agent_sa08() -> AgentResult:
-    return await _simulate("solana_to_base", 50.0)
+    return await _simulate("solana_to_celo", 50.0)
 
 
 async def agent_sa09() -> AgentResult:

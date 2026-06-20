@@ -10,7 +10,7 @@ from src.quotes.types import ProviderQuote
 @pytest.fixture
 def celo_chain():
     return ChainConfig(
-        key="base",
+        key="celo",
         name="Celo",
         chain_id=42220,
         enabled=True,

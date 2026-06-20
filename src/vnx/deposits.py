@@ -6,11 +6,9 @@ _DEFAULT_MIN_USDC_DEPOSIT: dict[str, float] = {"ETH": 20.0}
 
 
 def min_deposit_vchf(blockchain: str) -> float:
-    """Minimum cumulative on-chain VCHF deposit before VNX credits (CELO/BASE/SOL)."""
+    """Minimum cumulative on-chain VCHF deposit before VNX credits (CELO/SOL)."""
     bc = blockchain.strip().upper()
     if bc == "CELO":
-        return float(os.getenv("VNX_MIN_DEPOSIT_VCHF_CELO", "5"))
-    if bc == "BASE":
         return float(os.getenv("VNX_MIN_DEPOSIT_VCHF_BASE", "5"))
     if bc == "SOL":
         return float(os.getenv("VNX_MIN_DEPOSIT_VCHF_SOL", "5"))

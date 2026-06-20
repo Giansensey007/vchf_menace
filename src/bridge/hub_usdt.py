@@ -70,7 +70,7 @@ async def normalize_hub_to_usdt(
     amount_raw: int,
 ) -> float:
     """Convert any hub stable leg to USDT for cross-chain PnL."""
-    if chain_key in ("celo", "base"):
+    if chain_key == "base":
         return float(to_human(amount_raw, chain.hub_decimals))
     if chain.hub_stable == "USDT":
         return float(to_human(amount_raw, chain.hub_decimals))
@@ -78,10 +78,6 @@ async def normalize_hub_to_usdt(
         usdt_human, _ = await usdc_to_usdt_solana(client, amount_raw)
         return usdt_human
     return float(to_human(amount_raw, chain.hub_decimals))
-
-
-def usdt_raw_for_celo_buy(usdt_human: float) -> int:
-    return from_human(usdt_human, 6)
 
 
 def usdt_raw_for_base_buy(usdt_human: float) -> int:

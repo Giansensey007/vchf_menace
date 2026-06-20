@@ -23,7 +23,6 @@ def bot_cfg():
         peg_max=1.02,
         vnx_bridge_poll_sec=1,
         vnx_bridge_timeout_sec=5,
-        celo_gas_usd_estimate=0.25,
         base_gas_usd_estimate=0.25,
         solana_fee_usd_estimate=0.05,
         vnx_bridge_fee_usd=1.0,
@@ -50,9 +49,9 @@ async def test_bridge_dry_run(bot_cfg):
         mock_cls.return_value.__aenter__.return_value = inst
         inst.deposit_address.return_value = {"address": "0xdep123"}
         result = await bridge.bridge_vchf(
-            direction="base_to_solana",
+            direction="celo_to_solana",
             quantity=50.0,
-            source_blockchain="BASE",
+            source_blockchain="CELO",
             dest_blockchain="SOL",
             dest_label="sol-hot",
             deposit_tx_builder=fake_deposit,

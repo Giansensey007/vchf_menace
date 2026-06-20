@@ -3,33 +3,27 @@
 wormhole:
   name: Wormhole Portal
   url: https://portalbridge.com
-  celo_chain_id: 14
   base_chain_id: 30
   solana_chain_id: 1
   ethereum_chain_id: 2
-  celo_token_bridge: "0x796Dff6D74F3E27060B71255Fe517BFb23C93eed"
   base_token_bridge: "0x8d2de8d2f73F1F4cAB472AC9A881C9b123C79627"
   ethereum_token_bridge: "0x3ee18B2214AFF97000D974cf647E7C347E8fa585"
   solana_token_bridge: "wormDTUJ6AWPNvk59vGQbDvGJmqbDTdgWgAqcLBCgUb"
-  # Canonical Celo USDT — DEX, Wormhole Celo→ETH/Sol outbound
-  celo_usdt: "0x48065fbbe25f71c9282ddf5e1cd6d6a887483d5e"
-  celo_usdt_wormhole_from_eth: "0x617f3112bf5397D0467D315cC709EF968D9ba546"
   # Native Base USDC — DEX hub + Wormhole Base↔Sol/ETH outbound
   base_usdc: "0x833589fCD6eDb6E08f4c7C32D4F71b54bda02913"
-  base_usdc_wormhole_from_eth: "0x833589fCD6eDb6E08f4c7C32D4F71b54bda02913"
-  ethereum_usdt: "0xdAC17F958D2ee523a2206206994597C13D831ec7"
   ethereum_usdc: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
-  solana_usdt: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"
+  ethereum_usdt: "0xdAC17F958D2ee523a2206206994597C13D831ec7"
   solana_usdc: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+  solana_usdt: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"
   fee_usd_estimate: 0.50
   attestation_poll_sec: 15
   attestation_timeout_sec: 900
   claim_interval_sec: 30
 
 hub:
-  # Celo uses USDT; Base/Sol use USDC — normalize to USDT for PnL where needed
+  # Base and Solana both use USDC — no USDT normalization needed
   accounting_stable: USDC
-  sol_usdc_to_usdt_via: jupiter
+  sol_usdc_to_usdt_via: none
 
 # Circle CCTP v2 — USDC Solana ↔ Ethereum (VNX platform settlement on ETH)
 # https://developers.circle.com/cctp

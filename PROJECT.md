@@ -1,6 +1,6 @@
 # VCHF Menace
 
-Base ↔ Solana **VCHF/USDC arbitrage executor** with VNX Platform bridging for rebalancing.
+Celo ↔ Solana **VCHF/USDC arbitrage executor** with VNX Platform bridging for rebalancing.
 
 - **Repo:** https://github.com/Giansensey007/vchf_menace
 - **Local path:** `environment/VCHF_Menace/` (nested git — not VNX_trakcer)
@@ -10,14 +10,14 @@ Base ↔ Solana **VCHF/USDC arbitrage executor** with VNX Platform bridging for 
 
 | Route | Buy VCHF on | Sell VCHF on | Rebalance |
 |-------|-------------|--------------|-----------|
-| `base_to_solana` | Base (USDT) | Solana (USDC) | VNX bridge |
-| `solana_to_base` | Solana (USDC) | Base (USDT) | VNX bridge |
-| `base_to_vnx` | Base (USDT) | VNX Platform | deposit |
-| `vnx_to_base` | VNX Platform | Base (USDT) | withdraw |
+| `celo_to_solana` | Celo (USDT) | Solana (USDC) | VNX bridge |
+| `solana_to_celo` | Solana (USDC) | Celo (USDT) | VNX bridge |
+| `celo_to_vnx` | Celo (USDT) | VNX Platform | deposit |
+| `vnx_to_celo` | VNX Platform | Celo (USDT) | withdraw |
 | `solana_to_vnx` | Solana (USDC) | VNX Platform | deposit |
 | `vnx_to_solana` | VNX Platform | Solana (USDC) | withdraw |
 
-**Coverage:** SOL ↔ BASE, VNX ↔ BASE, VNX ↔ SOL
+**Coverage:** SOL ↔ CELO, VNX ↔ CELO, VNX ↔ SOL
 
 ## Validation (20 agents × 5 iterations)
 

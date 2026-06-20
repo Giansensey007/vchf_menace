@@ -9,15 +9,6 @@ from src.execution.kyber_swap import swap_via_kyber
 logger = logging.getLogger(__name__)
 
 USE_KYBER_SWAP = os.getenv("USE_KYBER_SWAP", "true").lower() in ("1", "true", "yes")
-MIN_SWAP_STABLE_OUT_RAW = int(os.getenv("MIN_SWAP_STABLE_OUT_RAW", "10000"))
-
-
-def validate_swap_min_out(min_raw: int, *, label: str = "swap") -> str | None:
-    if min_raw <= 0:
-        return f"{label}: amount_out_min is zero"
-    if min_raw < MIN_SWAP_STABLE_OUT_RAW:
-        return f"{label}: amount_out_min below dust threshold ({min_raw} < {MIN_SWAP_STABLE_OUT_RAW})"
-    return None
 
 
 def swap_tokens(
@@ -34,10 +25,6 @@ def swap_tokens(
     """
     EVM swap: KyberSwap aggregator first, Uniswap V3 exactInputSingle fallback.
     """
-    err = validate_swap_min_out(amount_out_min, label="swap")
-    if err:
-        logger.error("Rejecting swap: %s", err)
-        return None
     if USE_KYBER_SWAP and chain.kyber_slug:
         tx = swap_via_kyber(
             executor,

@@ -22,7 +22,6 @@ def bot_cfg():
         peg_max=1.02,
         vnx_bridge_poll_sec=1,
         vnx_bridge_timeout_sec=5,
-        celo_gas_usd_estimate=0.25,
         base_gas_usd_estimate=0.25,
         solana_fee_usd_estimate=0.05,
         vnx_bridge_fee_usd=1.0,
@@ -41,8 +40,8 @@ def _sim(net: float, error: str | None = None):
     from src.scanner.simulator import CycleSimulation
 
     return CycleSimulation(
-        direction="base_to_solana",
-        buy_chain="base",
+        direction="celo_to_solana",
+        buy_chain="celo",
         sell_chain="solana",
         size_vchf=100,
         stable_in_usd=100,
@@ -58,7 +57,7 @@ def _sim(net: float, error: str | None = None):
 async def test_search_continues_when_both_ends_unprofitable(bot_cfg):
     with patch("src.scanner.sizing.simulate_direction", new_callable=AsyncMock) as mock:
         mock.side_effect = lambda *_a, **_k: _sim(-2)
-        result = await search_profitable_size(None, {}, None, bot_cfg, "base_to_solana")
+        result = await search_profitable_size(None, {}, None, bot_cfg, "celo_to_solana")
     assert result is None
     assert mock.call_count >= 3  # endpoints + at least one midpoint probe
 
@@ -69,7 +68,7 @@ async def test_search_finds_profitable_at_max(bot_cfg):
         return _sim(10 if size >= 2000 else -2)
 
     with patch("src.scanner.sizing.simulate_direction", side_effect=fake_sim):
-        result = await search_profitable_size(None, {}, None, bot_cfg, "base_to_solana")
+        result = await search_profitable_size(None, {}, None, bot_cfg, "celo_to_solana")
     assert result is not None
     assert result.size_vchf == 2000
     assert result.simulation.net_profit_usd == 10
@@ -82,6 +81,6 @@ async def test_search_respects_max_quotes(bot_cfg):
     )
     with patch("src.scanner.sizing.simulate_direction", new_callable=AsyncMock) as mock:
         mock.side_effect = [_sim(6), _sim(6), _sim(8)]
-        result = await search_profitable_size(None, {}, None, bot_cfg, "base_to_solana")
+        result = await search_profitable_size(None, {}, None, bot_cfg, "celo_to_solana")
     assert result is not None
     assert mock.call_count <= 3

@@ -33,14 +33,14 @@ async def main() -> None:
 
     chains = load_chains()
     token = load_tokens()["VCHF"]
-    celo = chains["base"]
+    celo = chains["celo"]
     sol = chains["solana"]
 
     async with build_client() as client:
         for size in sizes:
             print(f"\n=== Size {size} VCHF ===")
             sol_dec = token_decimals(token, "solana")
-            celo_dec = token_decimals(token, "base")
+            celo_dec = token_decimals(token, "celo")
 
             vchf_amt = from_human(size, sol_dec)
             sell_sol = await sell_token_for_stable(client, sol, token, "solana", vchf_amt)
@@ -52,13 +52,13 @@ async def main() -> None:
                 print("  Sol sell: FAILED")
 
             usdt_probe = from_human(size * 1.35, celo.hub_decimals)
-            buy_celo = await buy_token_with_stable(client, celo, token, "base", usdt_probe)
+            buy_celo = await buy_token_with_stable(client, celo, token, "celo", usdt_probe)
             if buy_celo:
                 vchf = float(to_human(buy_celo.amount_out, celo_dec))
                 usdt = float(to_human(usdt_probe, celo.hub_decimals))
-                print(f"  Base buy: {usdt:.2f} USDT -> {vchf:.4f} VCHF via {buy_celo.provider}")
+                print(f"  Celo buy: {usdt:.2f} USDT -> {vchf:.4f} VCHF via {buy_celo.provider}")
             else:
-                print("  Base buy: FAILED")
+                print("  Celo buy: FAILED")
 
 
 if __name__ == "__main__":

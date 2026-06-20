@@ -8,7 +8,7 @@ from typing import Any
 import yaml
 
 from src.config_loader import CONFIG_DIR, load_bridge_config, load_chains, load_tokens, token_decimals
-from src.execution.base import BaseExecutor
+from src.execution.celo import CeloExecutor
 from src.execution.ethereum import ERC20_ABI, EthereumExecutor
 from src.execution.solana import SolanaExecutor
 from src.quotes.types import to_human
@@ -54,15 +54,15 @@ async def collect_balances() -> dict[str, float]:
         out["platform_vchf"] = vnx.vchf_balance(bal)
         out["platform_usdc"] = vnx.usdc_balance(bal)
 
-    celo = BaseExecutor(chains["base"])
-    out["base_usdc"] = float(to_human(celo.balance_erc20(chains["base"].hub_token), 6))
-    out["base_native"] = float(celo.w3.from_wei(celo.w3.eth.get_balance(celo.address), "ether"))
-    dec = token_decimals(token, "base")
-    out["celo_vchf"] = float(to_human(celo.balance_erc20(token.chains["base"]), dec))
+    celo = CeloExecutor(chains["celo"])
+    out["celo_usdt"] = float(to_human(celo.balance_erc20(chains["celo"].hub_token), 6))
+    out["celo_native"] = float(celo.w3.from_wei(celo.w3.eth.get_balance(celo.address), "ether"))
+    dec = token_decimals(token, "celo")
+    out["celo_vchf"] = float(to_human(celo.balance_erc20(token.chains["celo"]), dec))
 
-    wrapped = wh.get("base_usdc_wormhole_from_eth")
+    wrapped = wh.get("celo_usdt_wormhole_from_eth")
     if wrapped:
-        out["base_usdc_wrapped_eth"] = float(
+        out["celo_usdt_wrapped_eth"] = float(
             to_human(
                 celo.w3.eth.contract(address=celo.w3.to_checksum_address(wrapped), abi=ERC20_ABI)
                 .functions.balanceOf(celo.address)
@@ -96,23 +96,23 @@ async def funding_report(section: str = "production") -> tuple[list[FundingTarge
     labels = {
         "platform_vchf": "VNX VCHF",
         "platform_usdc": "VNX USDC",
-        "base_usdc": "Base USDT (canonical)",
+        "celo_usdt": "Celo USDT (canonical)",
         "sol_usdc": "Sol USDC",
         "eth_native": "ETH gas",
         "eth_usdc": "ETH USDC (hub)",
         "eth_usdt": "ETH USDT (hub)",
-        "base_native": "BASE gas",
+        "celo_native": "CELO gas",
         "sol_native": "SOL gas",
     }
     units = {
         "platform_vchf": "VCHF",
         "platform_usdc": "USDC",
-        "base_usdc": "USDT",
+        "celo_usdt": "USDT",
         "sol_usdc": "USDC",
         "eth_native": "ETH",
         "eth_usdc": "USDC",
         "eth_usdt": "USDT",
-        "base_native": "BASE",
+        "celo_native": "CELO",
         "sol_native": "SOL",
     }
 
@@ -139,9 +139,9 @@ def format_report(rows: list[FundingTarget], balances: dict[str, float]) -> str:
             f"  {'OK' if row.ok else '!!'} {row.label:<24} "
             f"{row.actual:>10.2f} / {row.target:.2f} {row.unit}  ({status})"
         )
-    wrapped = balances.get("base_usdc_wrapped_eth")
+    wrapped = balances.get("celo_usdt_wrapped_eth")
     if wrapped is not None and wrapped > 0.01:
-        lines.append(f"  -- Base wrapped ETH-USDT (Wormhole): {wrapped:.2f} USDT (not canonical)")
+        lines.append(f"  -- Celo wrapped ETH-USDT (Wormhole): {wrapped:.2f} USDT (not canonical)")
     ready = all(r.ok for r in rows)
     lines.append(f"\n{'PRODUCTION READY' if ready else 'UNDER-FUNDED — see gaps above'}")
     return "\n".join(lines)

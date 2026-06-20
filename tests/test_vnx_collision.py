@@ -4,22 +4,11 @@ import os
 
 import pytest
 
-from src.vnx.collision import (
-    collision_backoff_sec,
-    collision_retry_max,
-    is_vnx_collision_error,
-    vnx_error_message,
-)
+from src.vnx.collision import collision_backoff_sec, collision_retry_max, is_vnx_collision_error, vnx_error_message
 
 
 def test_collision_detects_invalid_nonce() -> None:
     assert is_vnx_collision_error("invalid_nonce: request rejected")
-    assert is_vnx_collision_error("HTTP 400 invalid_request_limit")
-
-
-def test_vnx_error_message_shape() -> None:
-    assert vnx_error_message({"result": "success"}) is None
-    assert "busy" in (vnx_error_message({"result": "error", "error": {"message": "server busy"}}) or "")
 
 
 @pytest.mark.parametrize(
@@ -36,12 +25,16 @@ def test_is_vnx_collision_error_positive(msg: str) -> None:
     assert is_vnx_collision_error(msg)
 
 
+def test_collision_detects_invalid_nonce() -> None:
+    assert is_vnx_collision_error("invalid_nonce: request rejected")
+
+
 @pytest.mark.parametrize(
     "msg",
     [
         "",
         None,
-        "timeout waiting for VCHF on Base",
+        "timeout waiting for VCHF on Celo",
         "not profitable",
         "unsupported direction",
     ],

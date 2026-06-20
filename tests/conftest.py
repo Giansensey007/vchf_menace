@@ -18,6 +18,7 @@ def test_env_keys():
     )
     os.environ["VNX_PRIVATE_KEY_B64"] = base64.b64encode(pem).decode()
     os.environ["BASE_PRIVATE_KEY"] = "0x" + "22" * 32
+    os.environ["BASE_PRIVATE_KEY"] = "0x" + "33" * 32
     os.environ["DRY_RUN"] = "true"
     kp = __import__("solders.keypair", fromlist=["Keypair"]).Keypair()
     os.environ["SOLANA_SECRET_KEY"] = str(kp)

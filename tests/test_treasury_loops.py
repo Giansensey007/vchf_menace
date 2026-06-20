@@ -15,14 +15,14 @@ def test_inverse_pairs():
 
 
 def test_celo_round_trip_closes():
-    assert return_closes_origin("base", "base_to_vnx")
-    assert inverse_direction("base_to_vnx") == "vnx_to_base"
+    assert return_closes_origin("celo", "celo_to_vnx")
+    assert inverse_direction("celo_to_vnx") == "vnx_to_celo"
 
 
-def test_base_sol_round_trip_closes_via_inverse():
-    # base_to_solana ends on Sol USDC; solana_to_base returns to Base USDT
-    assert return_closes_origin("base", "base_to_solana")
-    assert inverse_direction("base_to_solana") == "solana_to_base"
+def test_celo_sol_round_trip_closes_via_inverse():
+    # celo_to_solana ends on Sol USDC; solana_to_celo returns to Celo USDT
+    assert return_closes_origin("celo", "celo_to_solana")
+    assert inverse_direction("celo_to_solana") == "solana_to_celo"
 
 
 def test_vnx_to_sol_uses_cctp_return():

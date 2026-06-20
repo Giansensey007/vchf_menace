@@ -9,14 +9,14 @@ Repo: https://github.com/Giansensey007/vchf_menace
 
 | GBP Menace direction | VCHF Menace direction | Buy leg | Sell leg | Rebalance |
 |----------------------|----------------------|---------|----------|-----------|
-| `base_to_solana` | `base_to_solana` | Base USDT → VCHF | Sol VCHF → USDC | VNX bridge |
-| `solana_to_base` | `solana_to_base` | Sol USDC → VCHF | Base VCHF → USDT | VNX bridge |
-| `base_to_vnx` | `base_to_vnx` | Base USDT → VCHF | VNX sell VCHF | deposit |
-| `vnx_to_base` | `vnx_to_base` | VNX buy VCHF | Base VCHF → USDT | withdraw |
+| `celo_to_solana` | `celo_to_solana` | Celo USDT → VCHF | Sol VCHF → USDC | VNX bridge |
+| `solana_to_celo` | `solana_to_celo` | Sol USDC → VCHF | Celo VCHF → USDT | VNX bridge |
+| `celo_to_vnx` | `celo_to_vnx` | Celo USDT → VCHF | VNX sell VCHF | deposit |
+| `vnx_to_celo` | `vnx_to_celo` | VNX buy VCHF | Celo VCHF → USDT | withdraw |
 | `solana_to_vnx` | `solana_to_vnx` | Sol USDC → VCHF | VNX sell VCHF | deposit |
 | `vnx_to_solana` | `vnx_to_solana` | VNX buy VCHF | Sol VCHF → USDC | withdraw |
 | CCTP return after `vnx_to_solana` | same | Sol USDC → ETH → VNX USDC → buy VCHF | — | `use_cctp_usdc_return()` |
-| Wormhole hub (USDT) | same | Base ↔ ETH ↔ Sol stables | — | `execute_route_matrix` hub steps |
+| Wormhole hub (USDT) | same | Celo ↔ ETH ↔ Sol stables | — | `execute_route_matrix` hub steps |
 
 All six arb directions, CCTP USDC return, and Wormhole/CCTP hub legs mirror GBP with VCHF token/pool addresses and `platform_vchf_only` treasury naming.
 
@@ -38,7 +38,7 @@ On-chain deposit minimums (unchanged from GBP pattern):
 
 | Chain | Asset | Min cumulative |
 |-------|-------|----------------|
-| BASE | VCHF | 5 |
+| CELO | VCHF | 5 |
 | SOL | VCHF | 5 |
 | ETH | USDC | 20 |
 
@@ -50,35 +50,35 @@ Code constants: `src/vnx/trading.py` → `VCHF_MIN_ORDER = 30.0`; `src/quotes/vn
 
 | Chain | VCHF mint / contract |
 |-------|----------------------|
-| Base | `0xc5ebea9984c485ec5d58ca5a2d376620d93af871` |
+| Celo | `0xc5ebea9984c485ec5d58ca5a2d376620d93af871` |
 | Solana | `AhhdRu5YZdjVkKR3wbnUDaymVQL2ucjMQ63sZ3LFHsch` |
 | VNX Platform | `VCHF` (symbol) |
 
-Base DEX pool (Uniswap V3): `vchf_usdt` @ `0x899f68521196b4db5e3525e8ce1695efa9b05533` (fee 100, `token0_is_vchf: true`).
+Celo DEX pool (Uniswap V3): `vchf_usdt` @ `0x899f68521196b4db5e3525e8ce1695efa9b05533` (fee 100, `token0_is_vchf: true`).
 
 Source: VNX Telegram Chat `config/tokens.yaml` + `config/chains.yaml` (same as VNX canonical deployments).
 
 ---
 
-## 4. Production route — Base → Sol closed loop
+## 4. Production route — Celo → Sol closed loop
 
-**User target:** Platform VCHF → withdraw BASE → sell VCHF→USDT → bridge to Solana → buy VCHF with USDC → deposit VCHF to platform.
+**User target:** Platform VCHF → withdraw CELO → sell VCHF→USDT → bridge to Solana → buy VCHF with USDC → deposit VCHF to platform.
 
 ### Step-by-step
 
 | # | Action | Implementation |
 |---|--------|----------------|
-| 1 | Withdraw VCHF from VNX to Base hot wallet | `VnxBridge.bridge_vchf(..., withdraw_only=True)` in `vnx_to_base` |
-| 2 | Swap VCHF → USDT on Base | Base Uniswap V3 via `BaseExecutor` |
-| 3 | Bridge USDT Base → Solana | Wormhole Portal (`wormhole_base_to_sol_direct` in hub scripts) |
+| 1 | Withdraw VCHF from VNX to Celo hot wallet | `VnxBridge.bridge_vchf(..., withdraw_only=True)` in `vnx_to_celo` |
+| 2 | Swap VCHF → USDT on Celo | Celo Uniswap V3 via `CeloExecutor` |
+| 3 | Bridge USDT Celo → Solana | Wormhole Portal (`wormhole_celo_to_sol_direct` in hub scripts) |
 | 4 | Acquire VCHF on Solana | Jupiter: USDC → VCHF (may require USDT→USDC hop if only USDT landed) |
 | 5 | Deposit VCHF to VNX | `solana_to_vnx` — SPL transfer + VNX deposit poll |
 
 ### Mapping to route IDs
 
-- Primary leg: **`vnx_to_base`** (ends with USDT on Base)
-- Hub bridge: **`execute_route_matrix`** wormhole preflight / `base_usdc_to_sol_usdc`
-- Return leg: **`solana_to_vnx`** (or **`base_to_solana` inverse** depending on capital location)
+- Primary leg: **`vnx_to_celo`** (ends with USDT on Celo)
+- Hub bridge: **`execute_route_matrix`** wormhole preflight / `celo_usdt_to_sol_usdc`
+- Return leg: **`solana_to_vnx`** (or **`celo_to_solana` inverse** depending on capital location)
 
 Treasury helpers:
 
@@ -127,12 +127,12 @@ From `config/production.yaml`:
 |----------|---------|
 | Platform VCHF | 200 |
 | Platform USDC | 250 |
-| Base USDT | 250 |
+| Celo USDT | 250 |
 | Sol USDC | 250 |
 | ETH USDC | 50 |
 | ETH USDT | 50 |
 | ETH native | 0.015 |
-| BASE native | 0.5 |
+| CELO native | 0.5 |
 | SOL native | 0.05 |
 
 ### Route test (31 VCHF matrix)
@@ -141,7 +141,7 @@ From `config/production.yaml`:
 |----------|---------|
 | Platform VCHF | 32 |
 | Platform USDC | 45 |
-| Base USDT | 45 |
+| Celo USDT | 45 |
 | Sol USDC | 45 |
 
 Current shared hot wallet (GBP/VCHF keys): **under-funded** on all production targets; fund before `DRY_RUN=false`.
@@ -152,7 +152,7 @@ Current shared hot wallet (GBP/VCHF keys): **under-funded** on all production ta
 
 1. **Same VNX account as GBP** — VCHF and VGBP share one platform balance; run one Menace bot at a time or use separate VNX API keys per bot.
 2. **On-chain probes skipped** in verify-all until stables funded (expected).
-3. **Base sell probe** logs `AS` revert on gas estimate in dry-run — broadcast path uses same router as GBP; live swap requires ≥5 VCHF on Base for deposit credit.
+3. **Celo sell probe** logs `AS` revert on gas estimate in dry-run — broadcast path uses same router as GBP; live swap requires ≥5 VCHF on Celo for deposit credit.
 4. **PDF docs** (`docs/gbp-menace-*.pdf`) copied from template — regenerate with `scripts/generate_routes_pdf.py` for VCHF branding if needed.
 
 ---

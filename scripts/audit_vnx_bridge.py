@@ -40,7 +40,7 @@ async def main() -> None:
             print(f"WARN: accountBalance failed ({exc})")
 
         for chain_env, label in (
-            ("VNX_BASE_BLOCKCHAIN", "BASE"),
+            ("VNX_CELO_BLOCKCHAIN", "CELO"),
             ("VNX_SOL_BLOCKCHAIN", "SOL"),
         ):
             bc = os.getenv(chain_env, label)

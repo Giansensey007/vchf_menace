@@ -27,7 +27,6 @@ def _cfg(**overrides) -> BotConfig:
         peg_max=1.02,
         vnx_bridge_poll_sec=30,
         vnx_bridge_timeout_sec=3600,
-        celo_gas_usd_estimate=0.25,
         base_gas_usd_estimate=0.25,
         solana_fee_usd_estimate=0.05,
         vnx_bridge_fee_usd=1.0,
@@ -68,96 +67,87 @@ def _best(group: str, direction: str, net: float, **kw) -> RouteGroupBest:
 class TestChooseExecution:
     def test_neither_profitable(self):
         cfg = _cfg()
-        r = choose_execution(None, None, None, cfg)
+        r = choose_execution(None, None, cfg)
         assert r.opportunity is None
         assert "no profitable" in r.reason
 
     def test_only_vnx_sol(self):
         cfg = _cfg()
         vs = _best("vnx_sol", "vnx_to_solana", 8)
-        r = choose_execution(None, None, vs, cfg)
+        r = choose_execution(None, vs, cfg)
         assert r.opportunity is vs
 
     def test_exact_premium_boundary_prefers_indirect(self):
         cfg = _cfg(indirect_route_premium_usd=5.0)
-        cs = _best("base_sol", "base_to_solana", 10)
+        cs = _best("celo_sol", "celo_to_solana", 10)
         vs = _best("vnx_sol", "vnx_to_solana", 15)  # delta == 5
-        r = choose_execution(None, cs, vs, cfg)
+        r = choose_execution(cs, vs, cfg)
         assert r.opportunity is vs
 
     def test_one_below_premium_prefers_celo(self):
         cfg = _cfg(indirect_route_premium_usd=5.0)
-        cs = _best("base_sol", "base_to_solana", 10)
+        cs = _best("celo_sol", "celo_to_solana", 10)
         vs = _best("vnx_sol", "vnx_to_solana", 14.99)
-        r = choose_execution(None, cs, vs, cfg)
+        r = choose_execution(cs, vs, cfg)
         assert r.opportunity is cs
 
     def test_negative_delta_still_picks_celo(self):
         cfg = _cfg()
-        cs = _best("base_sol", "solana_to_base", 20)
+        cs = _best("celo_sol", "solana_to_celo", 20)
         vs = _best("vnx_sol", "solana_to_vnx", 10)
-        r = choose_execution(None, cs, vs, cfg)
+        r = choose_execution(cs, vs, cfg)
         assert r.opportunity is cs
 
     def test_zero_premium_picks_higher_profit(self):
         cfg = _cfg(indirect_route_premium_usd=0.0)
-        cs = _best("base_sol", "base_to_solana", 10)
+        cs = _best("celo_sol", "celo_to_solana", 10)
         vs = _best("vnx_sol", "vnx_to_solana", 10.01)
-        r = choose_execution(None, cs, vs, cfg)
+        r = choose_execution(cs, vs, cfg)
         assert r.opportunity is vs
 
-    def test_base_vnx_wins_over_base_sol(self):
+    def test_celo_vnx_wins_over_celo_sol(self):
         cfg = _cfg()
-        cs = _best("base_sol", "base_to_solana", 10)
-        cv = _best("base_vnx", "base_to_vnx", 25)
-        r = choose_execution(None, cs, None, cfg, base_vnx=cv)
+        cs = _best("celo_sol", "celo_to_solana", 10)
+        cv = _best("celo_vnx", "celo_to_vnx", 25)
+        r = choose_execution(cs, None, cfg, celo_vnx=cv)
         assert r.opportunity is cv
 
-    def test_base_vnx_loses_to_better_base_sol(self):
+    def test_celo_vnx_loses_to_better_celo_sol(self):
         cfg = _cfg()
-        cs = _best("base_sol", "base_to_solana", 30)
-        cv = _best("base_vnx", "vnx_to_base", 12)
-        r = choose_execution(None, cs, None, cfg, base_vnx=cv)
+        cs = _best("celo_sol", "celo_to_solana", 30)
+        cv = _best("celo_vnx", "vnx_to_celo", 12)
+        r = choose_execution(cs, None, cfg, celo_vnx=cv)
         assert r.opportunity is cs
 
 
 class TestActiveRoutes:
-    def test_default_ten_routes(self):
+    def test_default_six_routes(self):
         cfg = _cfg()
         routes = active_routes(cfg)
-        assert len(routes) == 10
+        assert len(routes) == 6
         dirs = {r.direction for r in routes}
         assert dirs == {
             "celo_to_solana",
             "solana_to_celo",
             "celo_to_vnx",
             "vnx_to_celo",
-            "base_to_solana",
-            "solana_to_base",
-            "base_to_vnx",
-            "vnx_to_base",
             "solana_to_vnx",
             "vnx_to_solana",
         }
 
-    def test_arb_disabled_drops_evm_vnx(self):
+    def test_arb_disabled_drops_celo_vnx(self):
         cfg = _cfg(enable_vnx_arb_routes=False)
-        assert len(active_routes(cfg)) == 6
-        assert "base_to_vnx" not in active_directions(cfg)
+        assert len(active_routes(cfg)) == 4
         assert "celo_to_vnx" not in active_directions(cfg)
 
     def test_cctp_disabled(self):
         cfg = _cfg(enable_vnx_cctp_routes=False)
-        assert len(active_routes(cfg)) == 8
+        assert len(active_routes(cfg)) == 4
         assert set(active_directions(cfg)) == {
             "celo_to_solana",
             "solana_to_celo",
             "celo_to_vnx",
             "vnx_to_celo",
-            "base_to_solana",
-            "solana_to_base",
-            "base_to_vnx",
-            "vnx_to_base",
         }
 
     def test_all_routes_when_both_enabled(self, monkeypatch):
@@ -166,7 +156,7 @@ class TestActiveRoutes:
         from src.config_loader import load_bot_config
 
         cfg = load_bot_config()
-        assert len(active_routes(cfg)) == 10
+        assert len(active_routes(cfg)) == 6
 
     def test_all_directions_have_route_spec(self):
         for d in active_directions(_cfg()):
@@ -175,8 +165,8 @@ class TestActiveRoutes:
 
 def _sim_result(net: float, error: str | None = None, sanity_ok: bool = True):
     return CycleSimulation(
-        direction="base_to_solana",
-        buy_chain="base",
+        direction="celo_to_solana",
+        buy_chain="celo",
         sell_chain="solana",
         size_vchf=100,
         stable_in_usd=100,
@@ -192,7 +182,7 @@ def _sim_result(net: float, error: str | None = None, sanity_ok: bool = True):
 @pytest.mark.asyncio
 async def test_search_invalid_range():
     cfg = _cfg(min_trade_vchf=2000, max_trade_vchf=200)
-    result = await search_profitable_size(None, {}, None, cfg, "base_to_solana")
+    result = await search_profitable_size(None, {}, None, cfg, "celo_to_solana")
     assert result is None
 
 
@@ -207,7 +197,7 @@ async def test_search_finds_interior_sweet_spot():
         return _sim_result(2)
 
     with patch("src.scanner.sizing.simulate_direction", side_effect=fake_sim):
-        result = await search_profitable_size(None, {}, None, cfg, "base_to_solana")
+        result = await search_profitable_size(None, {}, None, cfg, "celo_to_solana")
     assert result is not None
     assert result.simulation.net_profit_usd == 12
 
@@ -217,7 +207,7 @@ async def test_search_equal_min_max():
     cfg = _cfg(min_trade_vchf=500, max_trade_vchf=500)
     with patch("src.scanner.sizing.simulate_direction", new_callable=AsyncMock) as mock:
         mock.return_value = _sim_result(10)
-        result = await search_profitable_size(None, {}, None, cfg, "base_to_solana")
+        result = await search_profitable_size(None, {}, None, cfg, "celo_to_solana")
     assert result is not None
     assert result.size_vchf == 500
     assert mock.call_count == 1
@@ -231,7 +221,7 @@ async def test_search_prefers_larger_size_on_tie():
         return _sim_result(10 if size >= 200 else -1)
 
     with patch("src.scanner.sizing.simulate_direction", side_effect=fake_sim):
-        result = await search_profitable_size(None, {}, None, cfg, "base_to_solana")
+        result = await search_profitable_size(None, {}, None, cfg, "celo_to_solana")
     assert result is not None
     assert result.size_vchf == 2000
 
@@ -246,7 +236,7 @@ async def test_search_error_at_endpoint_still_searches():
         return _sim_result(8)
 
     with patch("src.scanner.sizing.simulate_direction", side_effect=fake_sim):
-        result = await search_profitable_size(None, {}, None, cfg, "base_to_solana")
+        result = await search_profitable_size(None, {}, None, cfg, "celo_to_solana")
     assert result is not None
     assert result.size_vchf >= 200
 
@@ -259,7 +249,7 @@ async def test_search_rejects_failed_sanity():
         return _sim_result(20, sanity_ok=False)
 
     with patch("src.scanner.sizing.simulate_direction", side_effect=fake_sim):
-        result = await search_profitable_size(None, {}, None, cfg, "base_to_solana")
+        result = await search_profitable_size(None, {}, None, cfg, "celo_to_solana")
     assert result is None
 
 
@@ -271,5 +261,5 @@ async def test_search_below_min_profit_not_returned():
         return _sim_result(3)
 
     with patch("src.scanner.sizing.simulate_direction", side_effect=fake_sim):
-        result = await search_profitable_size(None, {}, None, cfg, "base_to_solana")
+        result = await search_profitable_size(None, {}, None, cfg, "celo_to_solana")
     assert result is None

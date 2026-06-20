@@ -12,7 +12,6 @@ load_dotenv(ROOT / ".env")
 
 from src.config_loader import load_bot_config, load_chains, load_tokens, token_decimals
 from src.execution.celo import CeloExecutor
-from src.execution.evm_swap import validate_swap_min_out
 from src.quotes.types import to_human
 
 chains = load_chains()
@@ -33,10 +32,6 @@ if not sim:
     print("FAIL: no quote")
     sys.exit(1)
 min_usdt = int(sim["amount_out"] * (1 - cfg.slippage_bps / 10000))
-guard_err = validate_swap_min_out(min_usdt, label="celo sell VCHF")
-if guard_err:
-    print(f"FAIL: {guard_err}")
-    sys.exit(1)
 tx = celo.swap_exact_input(token.chains["celo"], usdt_token, vchf_raw, min_usdt)
 if not tx:
     print("FAIL: swap broadcast")
