@@ -670,13 +670,13 @@ def main() -> int:
         print(f"{engine} failed", file=sys.stderr)
         return 1
 
-    if pdf_path.exists():
+    built_pdf = tex_path.with_suffix(".pdf")
+    if built_pdf.exists():
+        if built_pdf.resolve() != pdf_path.resolve():
+            shutil.copy2(built_pdf, pdf_path)
         print(f"Wrote {pdf_path}")
-        if args.executive and pdf_path.name != tex_path.with_suffix(".pdf").name:
-            shutil.copy2(tex_path.with_suffix(".pdf"), pdf_path)
-            print(f"Wrote {pdf_path}")
     else:
-        print(f"{engine} finished but {pdf_path} not found", file=sys.stderr)
+        print(f"{engine} finished but {built_pdf} not found", file=sys.stderr)
         return 1
     return 0
 
