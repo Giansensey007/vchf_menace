@@ -100,6 +100,7 @@ class BotConfig:
     close_loop_always_return: bool = True
     close_loop_min_net_usd: float = 0.0
     jit_withdraw: bool = True
+    enable_loop_executor: bool = False
 
 
 def _chain_types_from_yaml() -> dict[str, str]:
@@ -211,6 +212,10 @@ def load_bot_config() -> BotConfig:
             os.getenv("CLOSE_LOOP_MIN_NET_USD", raw.get("close_loop_min_net_usd", 0.0))
         ),
         jit_withdraw=str(os.getenv("JIT_WITHDRAW", raw.get("jit_withdraw", True))).lower()
+        in ("1", "true", "yes"),
+        enable_loop_executor=str(
+            os.getenv("ENABLE_LOOP_EXECUTOR", raw.get("enable_loop_executor", False))
+        ).lower()
         in ("1", "true", "yes"),
     )
 
