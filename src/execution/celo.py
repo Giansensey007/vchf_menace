@@ -8,7 +8,7 @@ from web3 import Web3
 
 from src.config_loader import ChainConfig, is_dry_run
 from src.execution.celo_rpc import connect_celo_web3
-from src.quotes.sync_throttle import retry_backoff_sec, sync_throttle
+from src.execution.evm_swap import validate_swap_min_out
 from src.quotes.addresses import checksum
 
 logger = logging.getLogger(__name__)
@@ -95,10 +95,10 @@ class CeloExecutor:
         if not pk:
             raise ValueError("CELO_PRIVATE_KEY not set")
         self.account = Account.from_key(pk)
-        router = os.getenv("CELO_SWAP_ROUTER") or chain.swap_router
-        if not router:
-            raise ValueError("CELO swap router not configured")
-        self.router = checksum(router)
+        # Always use chains.yaml router — bad CELO_SWAP_ROUTER env caused no-op swaps.
+        if not chain.swap_router:
+            raise ValueError("CELO swap router not configured in chains.yaml")
+        self.router = checksum(chain.swap_router)
         self.w3 = connect_celo_web3(chain.rpc_url)
 
     @property
@@ -200,6 +200,10 @@ class CeloExecutor:
         amount_out_min: int,
         fee: int = 100,
     ) -> str | None:
+        err = validate_swap_min_out(amount_out_min, label="celo swap")
+        if err:
+            logger.error("Rejecting Celo swap: %s", err)
+            return None
         self.approve_if_needed(token_in, self.router, amount_in)
         router = self.w3.eth.contract(address=self.router, abi=SWAP_ROUTER_ABI)
         params = (

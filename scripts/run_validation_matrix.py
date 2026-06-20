@@ -30,7 +30,7 @@ SUBAGENTS = [
     ("SA-02", "quote-celo-onchain", "tests/test_quotes.py::test_onchain_mock"),
     ("SA-03", "quote-vnx-platform", "tests/test_quotes.py::test_vnx_platform_quote_mock"),
     ("SA-04", "quote-router-best", "tests/test_router.py::test_quote_best_onchain"),
-    ("SA-05", "routes-six-directions", "tests/test_routes.py::test_all_six_directions"),
+    ("SA-05", "routes-ten-directions", "tests/test_routes.py::test_all_ten_directions"),
     ("SA-06", "route-celo-vnx", "tests/test_routes.py::test_vnx_routes_need_bridge"),
     ("SA-07", "route-sol-vnx", "tests/test_routes.py::test_route_fees_vnx_platform"),
     ("SA-08", "route-celo-sol", "tests/test_routes.py::test_base_sol_bridge_fee"),

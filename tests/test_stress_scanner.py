@@ -122,12 +122,16 @@ class TestChooseExecution:
 
 
 class TestActiveRoutes:
-    def test_default_six_routes(self):
+    def test_default_ten_routes(self):
         cfg = _cfg()
         routes = active_routes(cfg)
-        assert len(routes) == 6
+        assert len(routes) == 10
         dirs = {r.direction for r in routes}
         assert dirs == {
+            "celo_to_solana",
+            "solana_to_celo",
+            "celo_to_vnx",
+            "vnx_to_celo",
             "base_to_solana",
             "solana_to_base",
             "base_to_vnx",
@@ -136,15 +140,20 @@ class TestActiveRoutes:
             "vnx_to_solana",
         }
 
-    def test_arb_disabled_drops_base_vnx(self):
+    def test_arb_disabled_drops_evm_vnx(self):
         cfg = _cfg(enable_vnx_arb_routes=False)
-        assert len(active_routes(cfg)) == 4
+        assert len(active_routes(cfg)) == 6
         assert "base_to_vnx" not in active_directions(cfg)
+        assert "celo_to_vnx" not in active_directions(cfg)
 
     def test_cctp_disabled(self):
         cfg = _cfg(enable_vnx_cctp_routes=False)
-        assert len(active_routes(cfg)) == 4
+        assert len(active_routes(cfg)) == 8
         assert set(active_directions(cfg)) == {
+            "celo_to_solana",
+            "solana_to_celo",
+            "celo_to_vnx",
+            "vnx_to_celo",
             "base_to_solana",
             "solana_to_base",
             "base_to_vnx",
@@ -157,7 +166,7 @@ class TestActiveRoutes:
         from src.config_loader import load_bot_config
 
         cfg = load_bot_config()
-        assert len(active_routes(cfg)) == 6
+        assert len(active_routes(cfg)) == 10
 
     def test_all_directions_have_route_spec(self):
         for d in active_directions(_cfg()):
