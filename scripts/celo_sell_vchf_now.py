@@ -28,7 +28,7 @@ print(f"Celo VCHF={vchf_ui:.4f} USDT={usdt_before:.2f}")
 if vchf_raw <= 0:
     print("Nothing to sell")
     sys.exit(0)
-sim = celo.simulate_swap(token.chains["celo"], usdt_token, vchf_raw, cfg.slippage_bps)
+sim = celo.simulate_swap(token.chains["celo"], usdt_token, vchf_raw, fee=100)
 if not sim:
     print("FAIL: no quote")
     sys.exit(1)

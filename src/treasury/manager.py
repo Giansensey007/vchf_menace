@@ -328,7 +328,13 @@ class TreasuryManager:
         """JIT prep: sweep VCHF home, verify stables / platform inventory for the leg."""
         notes: list[str] = []
         consolidated = 0.0
-        if self.cfg.jit_withdraw or self._platform_vchf_only():
+        skip_consolidate = direction in (
+            "celo_to_solana",
+            "solana_to_celo",
+            "base_to_solana",
+            "solana_to_base",
+        )
+        if (self.cfg.jit_withdraw or self._platform_vchf_only()) and not skip_consolidate:
             consolidated = await self.consolidate_vchf_to_platform()
             if consolidated:
                 notes.append(f"consolidated {consolidated:.2f} VCHF to platform")
@@ -345,7 +351,7 @@ class TreasuryManager:
             if not ok:
                 notes.append(msg)
 
-        if direction in ("celo_to_solana", "solana_to_celo"):
+        if direction in ("base_to_solana", "solana_to_base"):
             if not await self.ensure_platform_vchf_for_bridge(size_vchf):
                 notes.append(f"platform VCHF short for bridge ({snap.platform_vchf:.1f} < {size_vchf:.0f})")
                 return PrepareResult(False, direction, size_vchf, notes, consolidated)

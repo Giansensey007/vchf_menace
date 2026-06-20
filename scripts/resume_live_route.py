@@ -105,7 +105,7 @@ async def _sell_celo_vchf() -> tuple[bool, str | None]:
         return True, None
     vchf_ui = float(to_human(vchf_raw, dec))
     _log(f"\n--- Sell {vchf_ui:.4f} VCHF → USDT on Celo ---")
-    sim = celo.simulate_swap(token.chains["celo"], usdt_token, vchf_raw, cfg.slippage_bps)
+    sim = celo.simulate_swap(token.chains["celo"], usdt_token, vchf_raw, fee=100)
     if not sim:
         _log("FAIL: no Celo sell quote")
         return False, None
@@ -126,12 +126,14 @@ async def run_resume() -> int:
     _log(f"\n========== RESUME ROUTE (legs 2–3) ==========")
     _log(f"Before: platform VCHF={before['vchf']:.2f} Celo VCHF={celo_vchf:.4f}")
 
-    if celo_vchf >= 0.5:
+    # Sub-min VCHF dust: sell back to USDT so celo_to_solana can re-buy. Bridge-ready VCHF (≥5) is kept.
+    if 0.5 <= celo_vchf < 5.0:
         ok_sell, _ = await _sell_celo_vchf()
         if not ok_sell:
             return 1
+        celo_vchf = await _celo_vchf()
 
-    size = max(5.0, await _celo_vchf()) if await _celo_vchf() >= 5.0 else 5.0
+    size = max(5.0, celo_vchf) if celo_vchf >= 5.0 else 5.0
 
     chains = load_chains()
     token = load_tokens()["VCHF"]

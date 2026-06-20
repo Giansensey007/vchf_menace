@@ -20,6 +20,13 @@ def validate_swap_min_out(min_raw: int, *, label: str = "swap") -> str | None:
     return None
 
 
+def _default_pool_fee(chain: ChainConfig) -> int:
+    for pool in (chain.pools or {}).values():
+        if pool.get("fee") is not None:
+            return int(pool["fee"])
+    return 3000
+
+
 def swap_tokens(
     executor,
     chain: ChainConfig,
@@ -29,7 +36,7 @@ def swap_tokens(
     amount_out_min: int,
     *,
     slippage_bps: int = 50,
-    fee: int = 3000,
+    fee: int | None = None,
 ) -> str | None:
     """
     EVM swap: KyberSwap aggregator first, Uniswap V3 exactInputSingle fallback.
@@ -54,4 +61,5 @@ def swap_tokens(
             return tx
         logger.info("Kyber swap failed (%s), falling back to Uniswap", executor.last_error)
 
-    return executor.swap_exact_input(token_in, token_out, amount_in, amount_out_min, fee=fee)
+    pool_fee = fee if fee is not None else _default_pool_fee(chain)
+    return executor.swap_exact_input(token_in, token_out, amount_in, amount_out_min, fee=pool_fee)
