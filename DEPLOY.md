@@ -4,7 +4,8 @@
 
 1. Connect Railway to https://github.com/Giansensey007/vchf_menace
 2. Root directory: repo root (Dockerfile at root)
-3. Mount **persistent volume** at `/data` (SQLite at `/data/bot.db`)
+3. Mount **persistent volume** at `/data` (`DB_PATH=/data/bot.db`; also stores
+   `tx_log.jsonl`, `in_flight.jsonl`, `cctp_queue.json`, `wormhole_queue.json`)
 4. Copy all vars from `.env.example` into Railway env
 5. **Start with `DRY_RUN=true`** (Dockerfile and `is_dry_run()` default to true)
 6. Preflight (Railway shell or one-off job):
@@ -46,6 +47,9 @@
 | `RPC_BASE`, `RPC_SOLANA`, `RPC_ETHEREUM` | Mainnet RPCs — use paid Solana RPC in prod |
 | `SOL_RPC_MIN_INTERVAL_MS` | 800+ on public RPC; lower on Helius/QuickNode |
 | `DB_PATH` | Docker sets `/data/bot.db` — mount volume at `/data` |
+| `USE_KYBER_SWAP` | `true` — KyberSwap on Base; Uniswap V3 fallback |
+| `VNX_COLLISION_RETRY_MAX` / `VNX_COLLISION_BACKOFF_SEC` | `3` / `5` — shared VNX account with GBP Menace |
+| Persistent state | `in_flight.jsonl`, `tx_log.jsonl`, CCTP/Wormhole queues live in parent of `DB_PATH` |
 
 ## VNX minimums (enforced in code)
 

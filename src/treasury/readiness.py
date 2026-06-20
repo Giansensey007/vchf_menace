@@ -56,7 +56,7 @@ async def collect_balances() -> dict[str, float]:
 
     celo = BaseExecutor(chains["base"])
     out["base_usdc"] = float(to_human(celo.balance_erc20(chains["base"].hub_token), 6))
-    out["celo_native"] = float(celo.w3.from_wei(celo.w3.eth.get_balance(celo.address), "ether"))
+    out["base_native"] = float(celo.w3.from_wei(celo.w3.eth.get_balance(celo.address), "ether"))
     dec = token_decimals(token, "base")
     out["celo_vchf"] = float(to_human(celo.balance_erc20(token.chains["base"]), dec))
 
@@ -101,7 +101,7 @@ async def funding_report(section: str = "production") -> tuple[list[FundingTarge
         "eth_native": "ETH gas",
         "eth_usdc": "ETH USDC (hub)",
         "eth_usdt": "ETH USDT (hub)",
-        "celo_native": "BASE gas",
+        "base_native": "BASE gas",
         "sol_native": "SOL gas",
     }
     units = {
@@ -112,7 +112,7 @@ async def funding_report(section: str = "production") -> tuple[list[FundingTarge
         "eth_native": "ETH",
         "eth_usdc": "USDC",
         "eth_usdt": "USDT",
-        "celo_native": "BASE",
+        "base_native": "BASE",
         "sol_native": "SOL",
     }
 

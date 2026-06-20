@@ -8,7 +8,7 @@ production:
   eth_native: 0.015
   eth_usdc: 50
   eth_usdt: 50
-  celo_native: 0.5
+  base_native: 0.5
   sol_native: 0.05
 
 # Minimum to run a single 31 VCHF route test (scripts/rebalance_for_test.py)

@@ -168,7 +168,6 @@ def load_bot_config() -> BotConfig:
         celo_gas_usd_estimate=float(
             raw.get("celo_gas_usd_estimate", raw.get("base_gas_usd_estimate", 0.25))
         ),
-        celo_gas_usd_estimate=float(raw.get("celo_gas_usd_estimate", 0.25)),
         base_gas_usd_estimate=float(raw.get("base_gas_usd_estimate", 0.25)),
         solana_fee_usd_estimate=raw.get("solana_fee_usd_estimate", 0.05),
         vnx_bridge_fee_usd=raw.get(

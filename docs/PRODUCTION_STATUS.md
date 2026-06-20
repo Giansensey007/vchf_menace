@@ -38,7 +38,7 @@ DRY_RUN=true python scripts/execute_route_matrix.py --step verify-all
 | CCTP claim worker | `verify-all` → `cctp_claim` | Queue drains; discover + claim OK |
 | Wormhole claim worker | `verify-all` → `wormhole_claim` | Queue drains |
 | Wormhole preflight | `verify-all` → `wormhole_preflight` | Base outbound sim OK |
-| Route simulations | `verify-all` → `route_simulations` | All 8 directions quote @ 31 VCHF |
+| Route simulations | `verify-all` → `route_simulations` | All 6 directions quote @ 31 VCHF |
 
 ### In-flight tracking
 

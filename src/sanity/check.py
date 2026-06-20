@@ -24,16 +24,12 @@ def sanity_check_config() -> tuple[bool, list[str]]:
             if ck not in vchf.chains:
                 issues.append(f"VCHF missing on {ck}")
 
-    if len(ALL_ROUTES) != 10:
-        issues.append(f"expected 10 routes, got {len(ALL_ROUTES)}")
-    if len(ALL_DIRECTIONS) != 10:
-        issues.append(f"expected 10 directions, got {len(ALL_DIRECTIONS)}")
+    if len(ALL_ROUTES) != 6:
+        issues.append(f"expected 6 routes, got {len(ALL_ROUTES)}")
+    if len(ALL_DIRECTIONS) != 6:
+        issues.append(f"expected 6 directions, got {len(ALL_DIRECTIONS)}")
 
     expected = {
-        "celo_to_solana",
-        "solana_to_celo",
-        "celo_to_vnx",
-        "vnx_to_celo",
         "base_to_solana",
         "solana_to_base",
         "base_to_vnx",

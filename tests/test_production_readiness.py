@@ -41,7 +41,7 @@ async def test_funding_report_mock():
         "eth_native": 0.02,
         "eth_usdc": 50,
         "eth_usdt": 50,
-        "celo_native": 1.0,
+        "base_native": 1.0,
         "sol_native": 0.1,
     }
     with patch("src.treasury.readiness.collect_balances", new_callable=AsyncMock) as mock_bal:
