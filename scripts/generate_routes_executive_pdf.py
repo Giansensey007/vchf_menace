@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT))
 from src.scanner.routes import ALL_DIRECTIONS, active_directions
 
 PDF_STEM = "vchf-menace-routes-executive"
-GITHUB = "vchf_menace"
+GITHUB = r"vchf\_menace"
 BOT = "VCHF Menace"
 TOKEN = "VCHF"
 N_ROUTES = 10
