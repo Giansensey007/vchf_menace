@@ -34,6 +34,10 @@ async def run_once() -> None:
     snap = await treasury.snapshot()
     logger.info(treasury.balance_line(snap))
 
+    if bot_cfg.enable_loop_pipeline is True:
+        await run_once_loops(bot_cfg, chains, token)
+        return
+
     scanner = ArbScanner(bot_cfg)
     opp = await scanner.best_opportunity()
 
@@ -126,6 +130,41 @@ async def run_once() -> None:
         logger.info("Cycle %s state=%s txs=%s error=%s", record.id, record.state, record.tx_hashes, record.error)
 
 
+async def run_once_loops(bot_cfg, chains, token) -> None:
+    """Platform-first same-asset loop pipeline (ENABLE_LOOP_PIPELINE)."""
+    from src.execution.loop_executor import LoopExecutor
+    from src.scanner.loop_selector import select_best_loop
+    from src.scanner.routes import loop_for_key
+
+    async with build_client() as client:
+        selection = await select_best_loop(client, chains, token, bot_cfg)
+        if not selection.best:
+            logger.info("No profitable loop (min $%.2f): %s", bot_cfg.min_profit_usd, selection.reason)
+            return
+
+        best = selection.best
+        logger.info(
+            "Execute loop %s size=%.2f %s net=$%.2f fees=$%.2f dry_run=%s",
+            best.loop_key, best.size, best.token, best.net_profit_usd, best.fees_usd, is_dry_run(),
+        )
+        loop = loop_for_key(best.loop_key, bot_cfg)
+        if loop is None:
+            logger.warning("Selected loop %s no longer active", best.loop_key)
+            return
+
+        executor = LoopExecutor(chains, token, bot_cfg)
+        record = await executor.run_loop(client, loop, best.size)
+        if record.error and is_vnx_collision_error(record.error):
+            logger.warning(
+                "Loop skipped due to VNX platform contention (GBP bot may be active): %s",
+                record.error,
+            )
+        logger.info(
+            "Loop %s key=%s state=%s steps=%s txs=%s error=%s",
+            record.id, record.loop_key, record.state.value, record.steps_done, record.tx_hashes, record.error,
+        )
+
+
 async def main_loop() -> None:
     init_db()
     try:
@@ -140,7 +179,7 @@ async def main_loop() -> None:
     bot_cfg = load_bot_config()
     logger.info(
         "VCHF Menace deploy dry_run=%s poll=%ds size=%.0f-%.0f VCHF cctp=%s premium=$%.0f "
-        "close_loop=%s always_return=%s platform_vchf_only=%s",
+        "close_loop=%s always_return=%s platform_vchf_only=%s loop_pipeline=%s loop_exec=%s",
         is_dry_run(),
         bot_cfg.poll_interval_sec,
         bot_cfg.min_trade_vchf,
@@ -150,6 +189,8 @@ async def main_loop() -> None:
         bot_cfg.close_loop_after_cycle,
         bot_cfg.close_loop_always_return,
         bot_cfg.platform_vchf_only,
+        bot_cfg.enable_loop_pipeline,
+        bot_cfg.enable_loop_executor,
     )
 
     while True:
