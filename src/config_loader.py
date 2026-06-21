@@ -102,6 +102,7 @@ class BotConfig:
     jit_withdraw: bool = True
     enable_loop_executor: bool = False
     enable_loop_pipeline: bool = False
+    loop_swap_retry_max: int = 2
 
 
 def _chain_types_from_yaml() -> dict[str, str]:
@@ -222,6 +223,9 @@ def load_bot_config() -> BotConfig:
             os.getenv("ENABLE_LOOP_PIPELINE", raw.get("enable_loop_pipeline", False))
         ).lower()
         in ("1", "true", "yes"),
+        loop_swap_retry_max=int(
+            os.getenv("LOOP_SWAP_RETRY_MAX", raw.get("loop_swap_retry_max", 2))
+        ),
     )
 
 

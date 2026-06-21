@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.config_loader import BotConfig, ChainConfig, TokenConfig
-from src.execution.loop_executor import LoopExecutor, LoopState
+from src.execution.loop_executor import LoopExecutor, LoopRecord, LoopState
 from src.scanner.loop_simulator import LoopLeg, LoopSimulation
 from src.scanner.routes import LOOP1_OUTBOUND, LOOP2_INBOUND, LOOP3_CROSS, LoopSpec
 
@@ -113,6 +113,7 @@ def _apply(stack: ExitStack, sim: LoopSimulation, *, dry_run: bool = True) -> No
     for name in (
         "bridge_usdt_celo_to_ethereum", "bridge_usdt_ethereum_to_celo",
         "bridge_usdt_celo_to_solana", "bridge_usdt_solana_to_celo",
+        "bridge_usdt_with_redeem",
     ):
         setattr(wh, name, AsyncMock(return_value=_bridge_ok()))
 
@@ -250,3 +251,61 @@ async def test_live_execution_allowed_with_flag():
     sim = _sim(loop, size=100.0, token_out=110.0, legs=_l1_legs("base"))
     rec = await _run(loop, sim, dry_run=False, enable=True)
     assert rec.state == LoopState.DONE
+
+
+# ---- robustness hardening: swap retry + destination balance-await ----------
+
+
+@pytest.mark.asyncio
+async def test_swap_with_retry_recovers_after_transient_failure():
+    ex = LoopExecutor(CHAINS, TOKEN, _cfg())
+    calls = {"n": 0}
+
+    def flaky():
+        calls["n"] += 1
+        return None if calls["n"] == 1 else "0xok"
+
+    with patch(f"{MOD}.is_dry_run", new=MagicMock(return_value=True)):
+        tx = await ex._swap_with_retry("sell test", flaky)
+    assert tx == "0xok"
+    assert calls["n"] == 2  # failed once, retried, succeeded
+
+
+@pytest.mark.asyncio
+async def test_swap_with_retry_gives_up_after_max():
+    ex = LoopExecutor(CHAINS, TOKEN, _cfg())  # loop_swap_retry_max=2 -> 3 attempts
+    calls = {"n": 0}
+
+    def always_fail():
+        calls["n"] += 1
+        return None
+
+    with patch(f"{MOD}.is_dry_run", new=MagicMock(return_value=True)):
+        tx = await ex._swap_with_retry("buy test", always_fail)
+    assert tx is None
+    assert calls["n"] == 3
+
+
+@pytest.mark.asyncio
+async def test_await_stable_times_out_in_live_mode():
+    cfg = _cfg()
+    cfg.vnx_bridge_timeout_sec = 0  # do not actually block the test
+    ex = LoopExecutor(CHAINS, TOKEN, cfg)
+    rec = LoopRecord(id="x", loop_key="k", family=LOOP1_OUTBOUND, size=100.0)
+    with patch(f"{MOD}.is_dry_run", new=MagicMock(return_value=False)), \
+            patch.object(ex, "_stable_balance_raw", return_value=0):
+        ok = await ex._await_stable(rec, "base", 100.0)
+    assert ok is False
+    assert rec.state == LoopState.FAILED
+    assert rec.error and "timeout waiting for hub stable" in rec.error
+
+
+@pytest.mark.asyncio
+async def test_await_stable_skips_chain_without_reader():
+    ex = LoopExecutor(CHAINS, TOKEN, _cfg())
+    rec = LoopRecord(id="x", loop_key="k", family=LOOP1_OUTBOUND, size=100.0)
+    with patch(f"{MOD}.is_dry_run", new=MagicMock(return_value=False)), \
+            patch.object(ex, "_stable_balance_raw", return_value=None):
+        ok = await ex._await_stable(rec, "ethereum", 100.0)
+    assert ok is True
+    assert rec.state != LoopState.FAILED

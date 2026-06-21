@@ -153,6 +153,12 @@ class LoopExecutor:
     def _fail(self, rec: LoopRecord, msg: str | None) -> bool:
         rec.state = LoopState.FAILED
         rec.error = (msg or "loop step failed")[:300]
+        if rec.steps_done and not is_dry_run():
+            logger.error(
+                "LOOP %s FAILED mid-flight — MANUAL RECOVERY may be needed (funds may be on-chain "
+                "or in-bridge). loop=%s size=%s steps_done=%s txs=%s err=%s",
+                rec.id, rec.loop_key, rec.size, rec.steps_done, rec.tx_hashes, rec.error,
+            )
         return False
 
     # ---- entry point -----------------------------------------------------
@@ -227,6 +233,8 @@ class LoopExecutor:
             if not await self._bridge_stable(client, rec, x, loop.hub, usd, mech):
                 return
             usd = self._leg_usd(sim, "bridge_stable", default=usd)
+            if not await self._await_stable(rec, loop.hub, usd):
+                return
         if not await self._vnx_usdc_deposit(client, rec, usd):
             return
         buy_usd = self._leg_usd(sim, "vnx_usdc_deposit", default=usd)
@@ -244,11 +252,15 @@ class LoopExecutor:
         usd = self._leg_usd(sim, "platform_sell", default=rec.size)
         if not await self._withdraw_usdc(rec, usd):
             return
+        if not await self._await_stable(rec, loop.hub, usd):
+            return
         if x != loop.hub:
             mech = self._loop_mechanism(loop)
             if not await self._bridge_stable(client, rec, loop.hub, x, usd, mech):
                 return
             usd = self._leg_usd(sim, "bridge_stable", default=usd)
+            if not await self._await_stable(rec, x, usd):
+                return
         token_out = await self._buyback_onchain(client, rec, x, usd, sim.token_out)
         if token_out is None:
             return
@@ -273,6 +285,8 @@ class LoopExecutor:
         if not await self._bridge_stable(client, rec, a, b, usd, mech):
             return
         usd = self._leg_usd(sim, "bridge_stable", default=usd)
+        if not await self._await_stable(rec, b, usd):
+            return
         token_out = await self._buyback_onchain(client, rec, b, usd, sim.token_out)
         if token_out is None:
             return
@@ -313,18 +327,23 @@ class LoopExecutor:
         dec = token_decimals(self.token, chain)
         if chain == "solana":
             ex = SolanaExecutor(self.chains["solana"])
-            tx = await ex.swap(
-                client, self.token.chains["solana"], self.chains["solana"].hub_token,
-                from_human(qty, dec), self.cfg.slippage_bps,
-            )
+
+            def do_swap():
+                return ex.swap(
+                    client, self.token.chains["solana"], self.chains["solana"].hub_token,
+                    from_human(qty, dec), self.cfg.slippage_bps,
+                )
         elif chain in _EVM_EXEC_NAMES:
             ex = self._evm(chain)
             min_out = int(expect_usd * (1 - self.slip) * 10 ** self.chains[chain].hub_decimals)
-            tx = ex.swap_exact_input(
-                self.token.chains[chain], self.chains[chain].hub_token, from_human(qty, dec), min_out
-            )
+
+            def do_swap():
+                return ex.swap_exact_input(
+                    self.token.chains[chain], self.chains[chain].hub_token, from_human(qty, dec), min_out
+                )
         else:
             return self._fail(rec, f"on-chain sell not supported on {chain}")
+        tx = await self._swap_with_retry(f"sell {self.token.symbol} on {chain}", do_swap)
         if not tx:
             return self._fail(rec, f"{chain} sell {self.token.symbol} failed")
         rec.tx_hashes.append(tx)
@@ -339,19 +358,24 @@ class LoopExecutor:
         hub_dec = self.chains[chain].hub_decimals
         if chain == "solana":
             ex = SolanaExecutor(self.chains["solana"])
-            tx = await ex.swap(
-                client, self.chains["solana"].hub_token, self.token.chains["solana"],
-                from_human(usd, hub_dec), self.cfg.slippage_bps,
-            )
+
+            def do_swap():
+                return ex.swap(
+                    client, self.chains["solana"].hub_token, self.token.chains["solana"],
+                    from_human(usd, hub_dec), self.cfg.slippage_bps,
+                )
         elif chain in _EVM_EXEC_NAMES:
             ex = self._evm(chain)
             min_token = int(target_out * (1 - self.slip) * 10 ** dec)
-            tx = ex.swap_exact_input(
-                self.chains[chain].hub_token, self.token.chains[chain], from_human(usd, hub_dec), min_token
-            )
+
+            def do_swap():
+                return ex.swap_exact_input(
+                    self.chains[chain].hub_token, self.token.chains[chain], from_human(usd, hub_dec), min_token
+                )
         else:
             self._fail(rec, f"on-chain buy-back not supported on {chain}")
             return None
+        tx = await self._swap_with_retry(f"buy-back {self.token.symbol} on {chain}", do_swap)
         if not tx:
             self._fail(rec, f"{chain} buy-back {self.token.symbol} failed")
             return None
@@ -448,7 +472,7 @@ class LoopExecutor:
             br = await method(client, usd)
             source_domain, dest_domain = self._cctp_domains(frm, to)
         elif mechanism == "wormhole":
-            br = await self._wormhole_call(frm, to, usd)
+            br = await self._wormhole_call(client, frm, to, usd)
             source_domain = dest_domain = None
         else:
             return self._fail(rec, f"{mechanism} bridge {frm}->{to} not wired for live execution yet")
@@ -490,18 +514,57 @@ class LoopExecutor:
         except Exception:  # noqa: BLE001
             return None, None
 
-    async def _wormhole_call(self, frm: str, to: str, usd: float):
+    async def _wormhole_call(self, client: httpx.AsyncClient, frm: str, to: str, usd: float):
+        """Initiate AND redeem the Wormhole transfer so the stable actually lands on `to`.
+
+        Uses bridge_usdt_with_redeem, which enqueues the burn and runs the VAA claim
+        queue until the destination receives. Returns failure (so the loop aborts
+        cleanly) if the VAA cannot be claimed in time, instead of racing the buy-back.
+        """
+        recipient = self._chain_addr(to)
+        if not recipient and not is_dry_run():
+            raise ValueError(f"no recipient address for Wormhole dest {to}")
         wh = WormholePortalBridge(self.chains["celo"])
-        pair = (frm, to)
-        if pair == ("celo", "ethereum"):
-            return await wh.bridge_usdt_celo_to_ethereum(usd, self._chain_addr("ethereum"))
-        if pair == ("ethereum", "celo"):
-            return await wh.bridge_usdt_ethereum_to_celo(usd, self._chain_addr("celo"))
-        if pair == ("celo", "solana"):
-            return await wh.bridge_usdt_celo_to_solana(usd, self._chain_addr("solana"))
-        if pair == ("solana", "celo"):
-            return await wh.bridge_usdt_solana_to_celo(usd, self._chain_addr("celo"))
-        raise ValueError(f"no Wormhole route {frm}->{to}")
+        return await wh.bridge_usdt_with_redeem(
+            client,
+            from_chain=frm,
+            to_chain=to,
+            amount_usdt=usd,
+            recipient=recipient,
+            intent=f"loop_bridge_{frm}_{to}",
+        )
+
+    async def _swap_with_retry(self, label: str, do_swap):
+        """Run a swap thunk with bounded retries on transient failure.
+
+        ``do_swap`` returns a tx hash (truthy) on success or ``None`` on failure;
+        it may be sync (EVM) or return an awaitable (Solana). A reverted/failed
+        swap leaves no state change, so re-attempting is safe.
+        """
+        attempts = max(1, self.cfg.loop_swap_retry_max + 1)
+        last_err: str | None = None
+        for i in range(attempts):
+            try:
+                res = do_swap()
+                if asyncio.iscoroutine(res):
+                    res = await res
+            except Exception as exc:  # noqa: BLE001
+                last_err = str(exc)
+                res = None
+            if res:
+                if i:
+                    logger.info("loop swap %s ok on attempt %s/%s", label, i + 1, attempts)
+                return res
+            if i + 1 < attempts:
+                delay = min(2 ** i, 10)
+                logger.warning(
+                    "loop swap %s failed (attempt %s/%s)%s; retrying in %.0fs",
+                    label, i + 1, attempts, f": {last_err}" if last_err else "", delay,
+                )
+                if not is_dry_run():
+                    await asyncio.sleep(delay)
+        logger.error("loop swap %s failed after %s attempts: %s", label, attempts, last_err)
+        return None
 
     async def _await_token(self, chain: str, qty: float) -> None:
         """Live-only: wait for withdrawn token to credit the chain wallet."""
@@ -518,6 +581,44 @@ class LoopExecutor:
                 pass
             await asyncio.sleep(self.cfg.vnx_bridge_poll_sec)
         raise RuntimeError(f"timeout waiting for {self.token.symbol} on {chain} after VNX withdraw")
+
+    async def _await_stable(self, rec: LoopRecord, chain: str, usd: float) -> bool:
+        """Live-only: wait for bridged/withdrawn hub stable to credit `chain` before
+        the next swap/deposit consumes it. Returns False (and fails the loop) on timeout.
+
+        Chains without an on-chain balance reader are skipped (settlement owned by
+        the downstream primitive)."""
+        if is_dry_run() or usd <= 0:
+            return True
+        if self._stable_balance_raw(chain) is None:
+            return True  # no on-chain reader; downstream primitive owns settlement
+        hub_dec = self.chains[chain].hub_decimals
+        # allow for bridge fee / rounding: require ~97% of the simulated amount
+        needed = from_human(usd * 0.97, hub_dec)
+        deadline = time.time() + self.cfg.vnx_bridge_timeout_sec
+        while time.time() < deadline:
+            try:
+                bal = self._stable_balance_raw(chain)
+                if bal is not None and bal >= needed:
+                    return True
+            except Exception:  # noqa: BLE001
+                pass
+            await asyncio.sleep(self.cfg.vnx_bridge_poll_sec)
+        return self._fail(rec, f"timeout waiting for hub stable on {chain} after bridge/withdraw")
+
+    def _stable_balance_raw(self, chain: str) -> int | None:
+        if chain in _EVM_EXEC_NAMES:
+            return self._evm(chain).balance_erc20(self.chains[chain].hub_token)
+        if chain == "solana":
+            from solders.pubkey import Pubkey
+            from spl.token.instructions import get_associated_token_address
+
+            sol = SolanaExecutor(self.chains["solana"])
+            ata = get_associated_token_address(
+                sol.keypair.pubkey(), Pubkey.from_string(self.chains["solana"].hub_token)
+            )
+            return int(sol.token_account_balance(ata).value.amount)
+        return None
 
     def _token_balance_raw(self, chain: str) -> int:
         if chain in _EVM_EXEC_NAMES:
