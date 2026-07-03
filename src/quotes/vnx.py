@@ -17,12 +17,31 @@ VNX_QUOTE_CACHE_SEC = float(os.getenv("VNX_QUOTE_CACHE_SEC", "1.0"))
 
 VNX_MIN_ORDER: dict[str, float] = {"VCHF": 30.0}
 
+VNX_QUOTE_CURRENCY: dict[str, str] = {
+    "VGBP": "GBP",
+    "VCHF": "CHF",
+    "VNXAU": "USD",
+}
+
 _quote_cache: dict[str, dict] | None = None
 _cache_at: float = 0.0
 
 
-def _pair_symbol(token_symbol: str) -> str:
-    return f"{token_symbol}/USDC"
+def _pair_symbols(token_symbol: str) -> list[str]:
+    quote = VNX_QUOTE_CURRENCY.get(token_symbol, "USDC")
+    primary = f"{token_symbol}/{quote}"
+    legacy = f"{token_symbol}/USDC"
+    if primary == legacy:
+        return [primary]
+    return [primary, legacy]
+
+
+def _lookup_quote(quotes: dict[str, dict], token_symbol: str) -> tuple[str | None, dict | None]:
+    for pair in _pair_symbols(token_symbol):
+        q = quotes.get(pair)
+        if q:
+            return pair, q
+    return None, None
 
 
 async def _load_quotes(client: httpx.AsyncClient) -> dict[str, dict]:
@@ -85,10 +104,10 @@ async def quote_sell_token_for_usdc(
     except Exception as exc:
         return ProviderQuote("vnx", amount_in, 0, error=str(exc))
 
-    pair = _pair_symbol(token_symbol)
-    q = quotes.get(pair)
+    pair, q = _lookup_quote(quotes, token_symbol)
     if not q:
-        return ProviderQuote("vnx", amount_in, 0, error=f"no VNX quote for {pair}")
+        tried = ", ".join(_pair_symbols(token_symbol))
+        return ProviderQuote("vnx", amount_in, 0, error=f"no VNX quote for {tried}")
 
     bid_price, bid_liq = _price_and_liq(q.get("b"))
     if bid_price <= 0:
@@ -131,10 +150,10 @@ async def quote_buy_token_with_usdc(
     except Exception as exc:
         return ProviderQuote("vnx", stable_amount, 0, error=str(exc))
 
-    pair = _pair_symbol(token_symbol)
-    q = quotes.get(pair)
+    pair, q = _lookup_quote(quotes, token_symbol)
     if not q:
-        return ProviderQuote("vnx", stable_amount, 0, error=f"no VNX quote for {pair}")
+        tried = ", ".join(_pair_symbols(token_symbol))
+        return ProviderQuote("vnx", stable_amount, 0, error=f"no VNX quote for {tried}")
 
     ask_price, ask_liq = _price_and_liq(q.get("a"))
     if ask_price <= 0:
