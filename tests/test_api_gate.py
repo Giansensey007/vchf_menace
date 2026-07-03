@@ -38,7 +38,7 @@ async def test_api_sync_different_providers_independent():
 
 def test_provider_from_url():
     assert api_gate.provider_from_url("https://api.jup.ag/swap/v1/quote") == "jupiter"
-    assert api_gate.provider_from_url("https://api.vnx.li/api/v1/quotes") == "vnx"
+    assert api_gate.provider_from_url("https://api.vnx.io/api/v1/quotes") == "vnx"
     assert api_gate.provider_from_url("https://aggregator-api.kyberswap.com/base/api/v1/routes") == "kyber"
     assert api_gate.provider_from_url("https://iris-api.circle.com/v1/fees") == "cctp"
     assert api_gate.provider_from_url("https://forno.celo.org") == "celo_rpc"

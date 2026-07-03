@@ -114,5 +114,5 @@ def log_platform_order(intent: str, ordid: int | None, **extra: Any) -> TxRecord
         intent,
         "platform",
         f"ordid:{ordid}" if ordid is not None else "ordid:unknown",
-        extra={"ordid": ordid, "platform_url": "https://platform.vnx.li", **extra},
+        extra={"ordid": ordid, "platform_url": "https://www.vnx.io", **extra},
     )

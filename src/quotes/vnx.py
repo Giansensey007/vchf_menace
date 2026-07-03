@@ -11,7 +11,7 @@ from src.quotes.types import ProviderQuote, from_human, to_human
 
 logger = logging.getLogger(__name__)
 
-VNX_API_BASE = os.getenv("VNX_API_BASE", "https://api.vnx.li/api/v1").rstrip("/")
+VNX_API_BASE = os.getenv("VNX_API_BASE", "https://api.vnx.io/api/v1").rstrip("/")
 VNX_API_PUBLIC_KEY = os.getenv("VNX_API_PUBLIC_KEY", "").strip()
 VNX_QUOTE_CACHE_SEC = float(os.getenv("VNX_QUOTE_CACHE_SEC", "1.0"))
 

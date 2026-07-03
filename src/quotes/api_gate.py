@@ -50,7 +50,7 @@ def provider_from_url(url: str) -> str:
     host = (urlparse(url).hostname or "").lower()
     if "jup.ag" in host or "jupiter" in host:
         return "jupiter"
-    if "vnx.li" in host:
+    if "vnx.li" in host or "vnx.io" in host:
         return "vnx"
     if "kyberswap" in host or "kyber" in host:
         return "kyber"
