@@ -4,10 +4,11 @@ import pytest
 
 from src.config_loader import BotConfig, ChainConfig, TokenConfig
 from src.quotes.types import ProviderQuote
-from src.scanner.routes import RouteSpec
+from src.scanner.routes import ALL_DIRECTIONS, RouteSpec, route_for_direction
 from src.scanner.simulator import (
     _simulate_fixed_size_vnx_route,
     simulate_cctp_usdc_return_to_vnx,
+    simulate_direction,
     simulate_round_trip,
 )
 from src.treasury.loops import return_leg_direction, use_cctp_usdc_return
@@ -183,3 +184,69 @@ async def test_round_trip_vnx_uses_cctp_return(bot_cfg, chains, token):
     mock_cctp.assert_awaited_once()
     assert rt.return_direction == "cctp_sol_usdc_to_vnx"
     assert rt.round_trip_profit_usd == pytest.approx(-1.5)
+
+
+def _all_chains() -> dict:
+    def ch(key, chain_type="evm", chain_id=1, tier="onchain"):
+        return ChainConfig(
+            key=key,
+            name=key,
+            chain_type=chain_type,
+            chain_id=chain_id,
+            enabled=True,
+            bridge_verified=True,
+            hub_stable="USDC",
+            hub_token="USDC",
+            hub_decimals=6,
+            quote_tier=tier,
+            rpc_env="RPC",
+        )
+
+    return {
+        "celo": ch("celo", chain_id=42220),
+        "base": ch("base", chain_id=8453, tier="aggregator"),
+        "solana": ch("solana", "solana", 0, "jupiter"),
+        "ethereum": ch("ethereum", chain_id=1),
+        "vnx": ch("vnx", "vnx", 0, "vnx"),
+    }
+
+
+def _wide_token() -> TokenConfig:
+    return TokenConfig(
+        symbol="VCHF",
+        decimals=18,
+        chains={"vnx": "VCHF", "celo": "0xc", "base": "0xb", "solana": "mint", "ethereum": "0xe"},
+        chain_decimals={"solana": 9},
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("direction", list(ALL_DIRECTIONS))
+async def test_simulate_direction_every_route(bot_cfg, direction):
+    spec = route_for_direction(direction)
+    assert spec is not None
+    token = _wide_token()
+    chains = _all_chains()
+    rate_in, rate_out = 1.32, 1.33
+    size = 30.0
+
+    async def fake_cost(_client, _chains, _token, chain_key, size_vchf, cfg=None):
+        usd = size_vchf * rate_in
+        return usd, size_vchf, _quote("vnx", int(usd * 1e6), int(size_vchf * 10**18))
+
+    sell_q = _quote("sell", int(size * 10**18), int(size * rate_out * 1e6))
+    with patch(
+        "src.scanner.simulator._stable_cost_to_buy_vchf",
+        side_effect=fake_cost,
+    ), patch(
+        "src.scanner.simulator.sell_token_for_stable",
+        new_callable=AsyncMock,
+        return_value=sell_q,
+    ):
+        sim = await simulate_direction(AsyncMock(), chains, token, bot_cfg, direction, size)
+
+    if spec.buy_chain != "vnx":
+        assert sim.error and "blocked" in sim.error.lower()
+    else:
+        assert sim.error is None
+        assert sim.direction == direction

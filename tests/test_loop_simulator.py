@@ -7,9 +7,15 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from src.config_loader import BotConfig, ChainConfig, TokenConfig
+from src.config_loader import BotConfig, ChainConfig, TokenConfig, load_tokens
 from src.scanner.loop_simulator import simulate_loop
-from src.scanner.routes import LOOP1_OUTBOUND, LOOP2_INBOUND, LOOP3_CROSS, LoopSpec
+from src.scanner.routes import (
+    LOOP1_OUTBOUND,
+    LOOP2_INBOUND,
+    LOOP3_CROSS,
+    LoopSpec,
+    active_loops,
+)
 
 TOKEN = TokenConfig(
     symbol="VCHF",
@@ -108,3 +114,41 @@ async def test_loop3_base_to_solana_profitable():
     sim = await _run(LoopSpec(LOOP3_CROSS, "VCHF", "base", "solana"), sell_px={"base": 1.45}, buy_px={"solana": 1.30}, ref_bid=1.40)
     assert sim.error is None and sim.profitable
     assert len([leg for leg in sim.legs if leg.kind == "bridge_stable"]) == 1
+
+
+def _live_loops():
+    return active_loops(token=load_tokens()["VCHF"])
+
+
+def _px_book(sell: float, buy: float) -> tuple[dict[str, float], dict[str, float]]:
+    venues = ("celo", "base", "solana", "ethereum", "vnx")
+    return {k: sell for k in venues}, {k: buy for k in venues}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("loop", _live_loops(), ids=lambda loop: loop.key)
+async def test_simulate_loop_every_live_key(loop):
+    sell_px, buy_px = _px_book(1.45, 1.30)
+    sim = await _run(loop, sell_px=sell_px, buy_px=buy_px, ref_bid=1.32, size=100.0)
+    assert sim.error is None
+    assert sim.floors_ok
+    kinds = [leg.kind for leg in sim.legs]
+    if loop.family == LOOP1_OUTBOUND:
+        if loop.chain_a == loop.hub:
+            assert kinds == ["sell_onchain", "vnx_usdc_deposit", "platform_buyback"]
+        else:
+            assert kinds == ["sell_onchain", "bridge_stable", "vnx_usdc_deposit", "platform_buyback"]
+    elif loop.family == LOOP2_INBOUND:
+        if loop.chain_a == loop.hub:
+            assert kinds == ["platform_sell", "onchain_buyback", "vnx_token_deposit"]
+        else:
+            assert kinds == ["platform_sell", "bridge_stable", "onchain_buyback", "vnx_token_deposit"]
+    else:
+        assert kinds == ["sell_onchain", "bridge_stable", "onchain_buyback", "vnx_token_deposit"]
+        mech = loop.bridge_legs[0].mechanism
+        assert mech in sim.legs[1].detail
+        pair = {loop.chain_a, loop.chain_b}
+        if pair == {"celo", "base"}:
+            assert mech == "eth_triangle"
+        if pair == {"base", "solana"}:
+            assert mech == "cctp"
