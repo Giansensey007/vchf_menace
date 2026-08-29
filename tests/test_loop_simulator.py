@@ -14,7 +14,7 @@ from src.scanner.routes import (
     LOOP2_INBOUND,
     LOOP3_CROSS,
     LoopSpec,
-    active_loops,
+    catalog_loops,
 )
 
 TOKEN = TokenConfig(
@@ -117,7 +117,7 @@ async def test_loop3_base_to_solana_profitable():
 
 
 def _live_loops():
-    return active_loops(token=load_tokens()["VCHF"])
+    return catalog_loops(load_tokens()["VCHF"])
 
 
 def _px_book(sell: float, buy: float) -> tuple[dict[str, float], dict[str, float]]:

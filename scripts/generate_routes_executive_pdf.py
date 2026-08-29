@@ -4,7 +4,7 @@ Generate docs/gbp-menace-routes-executive.pdf — single-page executive loop dec
 
 Platform-first, same-asset round-trip model: every route is a loop that starts and
 ends with the VNX token on the platform. Content is generated directly from
-``src/scanner/routes.active_loops()`` so it never drifts from the code.
+``src/scanner/routes.catalog_loops()`` so it never drifts from the code.
 
 Usage:
   python scripts/generate_routes_executive_pdf.py
@@ -26,7 +26,7 @@ from src.scanner.routes import (
     LOOP2_INBOUND,
     LOOP3_CROSS,
     _bot_token,
-    active_loops,
+    catalog_loops,
 )
 
 # ---- per-bot constants -------------------------------------------------------
@@ -62,7 +62,7 @@ def _mech(loop) -> str:
 
 def collect():
     tok = _bot_token(load_tokens())
-    loops = active_loops(None, tok)
+    loops = catalog_loops(tok)
     rows = []
     for lp in loops:
         route = (

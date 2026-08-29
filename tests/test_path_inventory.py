@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from src.config_loader import load_tokens
+from src.config_loader import load_bot_config, load_tokens
 from src.scanner.routes import (
     ALL_DIRECTIONS,
     LOOP1_OUTBOUND,
+    LOOP3_CROSS,
     LoopSpec,
     active_loops,
     bridge_mechanism,
+    catalog_loops,
 )
 
 EXPECTED_DIRECTIONS = frozenset(
@@ -52,11 +54,20 @@ def test_live_directed_inventory():
 
 def test_live_loop_inventory():
     token = load_tokens()["VCHF"]
-    keys = frozenset(loop.key for loop in active_loops(token=token))
+    keys = frozenset(loop.key for loop in catalog_loops(token))
     assert keys == EXPECTED_LOOPS
     assert "loop1_outbound:base" in keys
     assert "loop3_cross:celo->base" in keys
     assert len(keys) == 12
+
+
+def test_default_active_loops_are_l3_cross():
+    token = load_tokens()["VCHF"]
+    keys = frozenset(loop.key for loop in active_loops(load_bot_config(), token))
+    expected = frozenset(k for k in EXPECTED_LOOPS if k.startswith("loop3_cross:"))
+    assert keys == expected
+    assert len(keys) == 6
+    assert all(loop.family == LOOP3_CROSS for loop in active_loops(load_bot_config(), token))
 
 
 def test_bridge_mechanism_matrix():
@@ -72,5 +83,5 @@ def test_bridge_mechanism_matrix():
 
 def test_required_live_keys_present():
     token = load_tokens()["VCHF"]
-    keys = {loop.key for loop in active_loops(token=token)}
+    keys = {loop.key for loop in catalog_loops(token)}
     assert LoopSpec(LOOP1_OUTBOUND, "VCHF", "base").key in keys

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from src.config_loader import TokenConfig
+from dataclasses import replace
+
+from src.config_loader import TokenConfig, load_bot_config
 from src.scanner.routes import (
     LOOP1_OUTBOUND,
     LOOP2_INBOUND,
@@ -11,6 +13,7 @@ from src.scanner.routes import (
     StepKind,
     active_loops,
     bridge_mechanism,
+    catalog_loops,
 )
 
 TOKEN = TokenConfig(
@@ -21,7 +24,7 @@ TOKEN = TokenConfig(
 
 
 def _loops():
-    return active_loops(token=TOKEN)
+    return catalog_loops(TOKEN)
 
 
 def _by_family(family: str) -> list[LoopSpec]:
@@ -73,3 +76,24 @@ def test_every_loop_is_same_asset_round_trip():
         for s in steps:
             if s.kind in (StepKind.PLATFORM_BUYBACK, StepKind.ONCHAIN_BUYBACK):
                 assert s.is_buyback
+
+
+def test_default_active_loops_is_l3_only():
+    from src.config_loader import load_tokens
+
+    token = load_tokens()["VCHF"]
+    loops = active_loops(load_bot_config(), token)
+    assert len(loops) == 6
+    assert {loop.family for loop in loops} == {LOOP3_CROSS}
+    assert all(loop.key.startswith("loop3_cross:") for loop in loops)
+
+
+def test_loop_family_flag_matrix():
+    from src.config_loader import load_tokens
+
+    token = load_tokens()["VCHF"]
+    base = load_bot_config()
+    assert len(active_loops(replace(base, enable_loop1=False, enable_loop2=False, enable_loop3=False), token)) == 0
+    assert len(active_loops(replace(base, enable_loop1=True, enable_loop2=False, enable_loop3=False), token)) == 3
+    assert len(active_loops(replace(base, enable_loop1=False, enable_loop2=False, enable_loop3=True), token)) == 6
+    assert len(active_loops(replace(base, enable_loop1=True, enable_loop2=True, enable_loop3=True), token)) == 12

@@ -39,3 +39,7 @@ bot:
   close_loop_min_net_usd: 0.0
   platform_vchf_only: true
   jit_withdraw: true
+  # Loop families: L3 is on-chain A-vs-B. L1/L2 are platform-vs-chain.
+  enable_loop1: false
+  enable_loop2: false
+  enable_loop3: true

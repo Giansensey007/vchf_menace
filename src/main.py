@@ -179,7 +179,8 @@ async def main_loop() -> None:
     bot_cfg = load_bot_config()
     logger.info(
         "VCHF Menace deploy dry_run=%s poll=%ds size=%.0f-%.0f VCHF cctp=%s premium=$%.0f "
-        "close_loop=%s always_return=%s platform_vchf_only=%s loop_pipeline=%s loop_exec=%s",
+        "close_loop=%s always_return=%s platform_vchf_only=%s "
+        "loop1=%s loop2=%s loop3=%s loop_pipeline=%s loop_exec=%s",
         is_dry_run(),
         bot_cfg.poll_interval_sec,
         bot_cfg.min_trade_vchf,
@@ -189,6 +190,9 @@ async def main_loop() -> None:
         bot_cfg.close_loop_after_cycle,
         bot_cfg.close_loop_always_return,
         bot_cfg.platform_vchf_only,
+        bot_cfg.enable_loop1,
+        bot_cfg.enable_loop2,
+        bot_cfg.enable_loop3,
         bot_cfg.enable_loop_pipeline,
         bot_cfg.enable_loop_executor,
     )

@@ -102,6 +102,9 @@ class BotConfig:
     jit_withdraw: bool = True
     enable_loop_executor: bool = False
     enable_loop_pipeline: bool = False
+    enable_loop1: bool = False
+    enable_loop2: bool = False
+    enable_loop3: bool = True
     loop_swap_retry_max: int = 2
 
 
@@ -222,6 +225,12 @@ def load_bot_config() -> BotConfig:
         enable_loop_pipeline=str(
             os.getenv("ENABLE_LOOP_PIPELINE", raw.get("enable_loop_pipeline", False))
         ).lower()
+        in ("1", "true", "yes"),
+        enable_loop1=str(os.getenv("ENABLE_LOOP1", raw.get("enable_loop1", False))).lower()
+        in ("1", "true", "yes"),
+        enable_loop2=str(os.getenv("ENABLE_LOOP2", raw.get("enable_loop2", False))).lower()
+        in ("1", "true", "yes"),
+        enable_loop3=str(os.getenv("ENABLE_LOOP3", raw.get("enable_loop3", True))).lower()
         in ("1", "true", "yes"),
         loop_swap_retry_max=int(
             os.getenv("LOOP_SWAP_RETRY_MAX", raw.get("loop_swap_retry_max", 2))

@@ -345,10 +345,8 @@ def trading_chains(token: TokenConfig) -> tuple[str, ...]:
     return tuple(c for c in token.chains if c != "vnx")
 
 
-def active_loops(
-    cfg: BotConfig | None = None, token: TokenConfig | None = None
-) -> tuple[LoopSpec, ...]:
-    """Generate every same-asset loop for this bot's trading chains.
+def catalog_loops(token: TokenConfig | None = None) -> tuple[LoopSpec, ...]:
+    """Unfiltered same-asset loops for this bot's trading chains.
 
     Loop 1 + Loop 2: one each per trading chain. Loop 3: every ordered distinct
     pair of trading chains. ETH is a trading chain only where the token is
@@ -367,6 +365,21 @@ def active_loops(
             if a != b:
                 loops.append(LoopSpec(LOOP3_CROSS, sym, a, b))
     return tuple(loops)
+
+
+def active_loops(
+    cfg: BotConfig | None = None, token: TokenConfig | None = None
+) -> tuple[LoopSpec, ...]:
+    """Same-asset loops enabled by ENABLE_LOOP1 / LOOP2 / LOOP3 (default L3 only)."""
+    cfg = cfg or load_bot_config()
+    allowed: set[str] = set()
+    if cfg.enable_loop1:
+        allowed.add(LOOP1_OUTBOUND)
+    if cfg.enable_loop2:
+        allowed.add(LOOP2_INBOUND)
+    if cfg.enable_loop3:
+        allowed.add(LOOP3_CROSS)
+    return tuple(loop for loop in catalog_loops(token) if loop.family in allowed)
 
 
 def active_loop_keys(cfg: BotConfig | None = None) -> tuple[str, ...]:
