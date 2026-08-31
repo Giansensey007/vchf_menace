@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fund ~$10 native gas on ETH, SOL, and BASE from platform USDC.
 
-Requires VNX ETH whitelist for 0x13D813… (VNX_ETH_WITHDRAW_LABEL, e.g. Arb_explorer).
+Requires VNX ETH whitelist for 0xF7a991… (VNX_ETH_WITHDRAW_LABEL, e.g. Arb_explorer).
 Until VNX confirms the ETH address, withdraw will fail at the API — route stays enabled.
 """
 from __future__ import annotations
