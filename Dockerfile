@@ -10,6 +10,7 @@ COPY src/ src/
 COPY scripts/ scripts/
 
 ENV PYTHONPATH=/app
+ENV PYTHONDONTWRITEBYTECODE=1
 ENV DB_PATH=/data/bot.db
 ENV DRY_RUN=true
 

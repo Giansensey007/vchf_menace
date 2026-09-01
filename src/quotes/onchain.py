@@ -6,6 +6,18 @@ from src.config_loader import ChainConfig
 from src.quotes.addresses import checksum
 from src.quotes.types import ProviderQuote
 
+_W3: dict[str, Web3] = {}
+
+
+def _web3(rpc_url: str) -> Web3:
+    cached = _W3.get(rpc_url)
+    if cached is not None:
+        return cached
+    w3 = Web3(Web3.HTTPProvider(rpc_url, request_kwargs={"timeout": 20}))
+    _W3[rpc_url] = w3
+    return w3
+
+
 QUOTER_V2_ABI = [
     {
         "inputs": [
@@ -68,7 +80,7 @@ def quote_onchain_pools(
 ) -> list[ProviderQuote]:
     if not chain.rpc_url or not chain.quoter_v2:
         return [ProviderQuote("uniswap_v3", amount_in, 0, error="no RPC")]
-    w3 = Web3(Web3.HTTPProvider(chain.rpc_url, request_kwargs={"timeout": 20}))
+    w3 = _web3(chain.rpc_url)
     if not w3.is_connected():
         return [ProviderQuote("uniswap_v3", amount_in, 0, error="RPC unreachable")]
 
